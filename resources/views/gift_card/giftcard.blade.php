@@ -239,7 +239,7 @@
     var decimal_degits = 0;
     var currencyData = '';
      var createdAt = firebase.firestore.FieldValue.serverTimestamp();
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     refCurrency.get().then(async function(snapshots) {
         currencyData = snapshots.docs[0].data();
         currentCurrency = currencyData.symbol;

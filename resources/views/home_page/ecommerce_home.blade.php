@@ -233,7 +233,7 @@
 
     var itemCategoriesref = database.collection('vendor_categories').where('section_id', '==', section_id).where("publish", "==", true).limit(7);
     var bannerref = database.collection('banner_items').where('sectionId', '==', section_id).where("is_publish", "==", true).orderBy('set_order', 'asc');
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     var brandsRef = database.collection('brands').where('sectionId', '==', section_id).where('is_publish', '==', true).limit(7);
     var productref = database.collection('vendor_products').where('section_id', '==', section_id);
 

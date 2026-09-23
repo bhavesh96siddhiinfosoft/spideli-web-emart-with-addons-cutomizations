@@ -23,7 +23,7 @@
     var currentCurrency = '';
     var currencyAtRight = false;
     var ref = database.collection('favorite_item').where('user_id', '==', user_uuid);
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     var pagesize = 10;
     var offest = 1;
     var end = null;

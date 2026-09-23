@@ -905,6 +905,46 @@
         return parts;
     }
 
+    /* Writes the header location box's address cookies from a Google place.
+ *
+ * The stock panel CALLS this from initialize() - on both the desktop and
+ * mobile header autocompletes - but never defines it anywhere, so picking a
+ * suggestion threw "setAddressCookies is not defined" and nothing was saved.
+ * That is the google branch, which is the one that runs whenever
+ * settings/DriverNearBy.selectedMapType is 'google'; the OSM branch below
+ * does the same job and was always complete.
+ *
+ * Mirrors that OSM handler exactly: write every address cookie, keep the
+ * country cookies in step, then reload so the rest of the page picks the
+ * new location up. */
+    async function setAddressCookies(place) {
+        if (!place) {
+            return;
+        }
+
+        var parts = addressPartsFromGoogle(place);
+        var components = place.address_components || [];
+
+        setCookie('address_name', parts.line1 || '', 365);
+        setCookie('address_name1', googleComponent(components, 'route') || parts.line2 || '', 365);
+        setCookie('address_name2', parts.line2 || '', 365);
+        setCookie('address_zip', parts.zip || '', 365);
+        setCookie('address_city', parts.city || '', 365);
+        setCookie('address_state', googleComponent(components, 'administrative_area_level_1'), 365);
+        setCookie('address_country', parts.country || '', 365);
+
+        if (parts.lat !== undefined && parts.lng !== undefined) {
+            setCookie('address_lat', parts.lat, 365);
+            setCookie('address_lng', parts.lng, 365);
+            address_lat = parts.lat;
+            address_lng = parts.lng;
+            /* Drives the tax lookup and region detection. */
+            await setUserCountryCookie(parts.lat, parts.lng);
+        }
+
+        window.location.reload(true);
+    }
+
     /* Shapes a Nominatim result, from either /search or /reverse - both carry
      * the same `address` object once addressdetails=1 is asked for. */
     function addressPartsFromOsm(data) {
@@ -1011,6 +1051,17 @@
             return;
         }
 
+        /* Google's Autocomplete does not predict when it is attached to a
+         * hidden input, and binding it while the modal is closed also sets the
+         * flag below, so the shown.bs.modal call that would have bound it
+         * properly returns early and the field silently offers nothing.
+         *
+         * This only showed up once the location guard meant the modal usually
+         * opens on demand rather than automatically at page load. */
+        if (input.offsetParent === null) {
+            return;
+        }
+
         if (mapType === 'google') {
             /* The Maps script is only fetched after settings/googleMapKey has
              * been read, so it is often not there yet when the modal opens on
@@ -1077,15 +1128,10 @@
     var currencyAtRight = false;
     var decimal_degits = 0;
     var currencyData = '';
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
-    refCurrency.get().then(async function(snapshots) {
-        currencyData = snapshots.docs[0].data();
-        currentCurrency = currencyData.symbol;
-        currencyAtRight = currencyData.symbolAtRight;
-        if (currencyData.decimal_degits) {
-            decimal_degits = currencyData.decimal_degits;
-        }
-    });
+    /* The fetch that fills these lives at the end of the LAST script block in
+     * this file, because it calls regionCurrencyRef(), which is declared
+     * there. Function declarations hoist within a script block, not across
+     * them - this file has four. */
 
     let taxBreakdownGrouped = {
         item: {},
@@ -1621,6 +1667,41 @@
         });
     <?php } ?>
 
+    /* The map-pin button fails silently in the stock panel: the google branch
+ * passes an empty error callback, and showError() writes into an <input>'s
+ * innerHTML, which renders nothing at all. A customer clicking it just sees
+ * the page do nothing.
+ *
+ * The commonest cause is not a refused permission. Browsers only expose
+ * navigator.geolocation on SECURE origins, so the button can never work over
+ * plain http on anything but localhost - which is how this panel is served in
+ * development. Reporting that clearly saves a long hunt.
+ *
+ * Rather than leave a dead button, open the address modal so the customer can
+ * type an address instead, and say why it opened. */
+    function handleGeolocationFailure(error) {
+        var message;
+        if (!window.isSecureContext) {
+            message = "{{ trans('lang.location_needs_https') }}";
+        } else if (error && error.code === 1) {
+            message = "{{ trans('lang.location_permission_denied') }}";
+        } else {
+            message = "{{ trans('lang.location_unavailable') }}";
+        }
+
+        /* The modal clears its own status on shown, so set ours after that. */
+        $('#locationModalAddress').one('shown.bs.modal', function () {
+            setTimeout(function () {
+                addressModalStatus(message, true);
+            }, 0);
+        });
+
+        var opener = document.getElementById('locationModal');
+        if (opener) {
+            opener.click();
+        }
+    }
+
     async function getCurrentLocation(type = '') {
         var is_map = '';
         is_map = "<?php echo env('IS_MAP'); ?>";
@@ -1688,15 +1769,15 @@
                             }
                         } catch (err) {}
                     },
-                    function() {});
+                    handleGeolocationFailure);
             } else {
-                // Browser doesn't support Geolocation
+                handleGeolocationFailure(null);
             }
         } else {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(showPosition, showError);
             } else {
-                document.getElementById('user_locationnew').innerHTML = "Geolocation is not supported by this browser.";
+                handleGeolocationFailure(null);
             }
             if (type == 'reload') {
                 window.location.reload(true);
@@ -1749,21 +1830,10 @@
             console.error("Error fetching data from Nominatim.");
         });
     }
+    /* Was writing each message into an <input>'s innerHTML, which renders
+ * nothing, so every geolocation failure on the OSM path was invisible. */
     function showError(error) {
-        switch (error.code) {
-            case error.PERMISSION_DENIED:
-                document.getElementById('user_locationnew').innerHTML = "User denied the request for Geolocation.";
-                break;
-            case error.POSITION_UNAVAILABLE:
-                document.getElementById('user_locationnew').innerHTML = "Location information is unavailable.";
-                break;
-            case error.TIMEOUT:
-                document.getElementById('user_locationnew').innerHTML = "The request to get user location timed out.";
-                break;
-            case error.UNKNOWN_ERROR:
-                document.getElementById('user_locationnew').innerHTML = "An unknown error occurred.";
-                break;
-        }
+        handleGeolocationFailure(error);
     }
     async function saveShippingAddress() {
         var line1 = $("#address_line1").val();
@@ -3294,15 +3364,11 @@
         return getCurrencyForRegion(await regionIdForStore(store));
     }
 
-    /* Shims shaped like the Firestore query the 52 views already use, so
-     * converting one is a single line:
-     *
-     *   var refCurrency = database.collection('currencies').where('isActive', '==', true);
-     *   ->
-     *   var refCurrency = storeCurrencyRef(vendorData);
-     *
-     * The `.get().then(function (snapshots) { snapshots.docs[0].data() })`
-     * underneath keeps working untouched. */
+    /* Shims shaped like the Firestore query every view already used, so
+     * converting one was a single line: the old
+     * collection(currencies).where(isActive, true) declaration became a
+     * call to one of these, and the .get().then() underneath kept working
+     * untouched. */
     function currencyRefFor(resolve) {
         return {
             where: function () { return this; },
@@ -3520,6 +3586,28 @@
 
     $(function () {
         renderActiveRegionCode();
+    });
+
+    /* Fills the page-level currency globals declared near the top of this
+     * file. It sits here, at the end of the last script block, because
+     * regionCurrencyRef() is declared in this block and hoisting does not
+     * cross script blocks.
+     *
+     * Every view that shows money declares its own `refCurrency` and writes
+     * these same globals, so all of them must read from one source or the
+     * displayed currency becomes a race between two fetches. That is why
+     * they were all converted together. */
+    var refCurrency = regionCurrencyRef();
+    refCurrency.get().then(async function (snapshots) {
+        if (!snapshots.docs.length) {
+            return;
+        }
+        currencyData = snapshots.docs[0].data();
+        currentCurrency = currencyData.symbol;
+        currencyAtRight = currencyData.symbolAtRight;
+        if (currencyData.decimal_degits) {
+            decimal_degits = currencyData.decimal_degits;
+        }
     });
     
 </script>

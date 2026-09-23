@@ -318,7 +318,7 @@
     var currentCurrency = '';
     var currencyAtRight = false;
     var decimal_degits = 0;
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     if (user_uuid) {
         var userDetailsRef = database.collection('users').where('id', "==", user_uuid);
     }

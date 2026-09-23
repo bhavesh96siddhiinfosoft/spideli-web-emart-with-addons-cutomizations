@@ -133,7 +133,7 @@
     var decimal_degits = 0;
     var currentCurrency = '';
     var currencyAtRight = false;
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     refCurrency.get().then(async function (snapshots) {
         currencyData = snapshots.docs[0].data();
         currentCurrency = currencyData.symbol;

@@ -223,7 +223,7 @@
     var geoFirestore = new GeoFirestore(firestore);
     var currentCurrency = '';
     var currencyAtRight = false;
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     var currencyData = '';
     refCurrency.get().then(async function (snapshots) {
         currencyData = snapshots.docs[0].data();

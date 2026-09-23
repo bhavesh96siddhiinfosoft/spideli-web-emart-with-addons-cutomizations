@@ -382,7 +382,7 @@ session_start();
     var id_order = database.collection('temp').doc().id;
     var userId = "<?php echo $id; ?>";
     var userDetailsRef = database.collection('users').where('id', "==", userId);
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     var razorpaySettings = database.collection('settings').doc('razorpaySettings');
     var codSettings = database.collection('settings').doc('CODSettings');
     var stripeSettings = database.collection('settings').doc('stripeSettings');

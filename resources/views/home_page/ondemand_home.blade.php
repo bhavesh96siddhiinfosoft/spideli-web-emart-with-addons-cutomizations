@@ -126,7 +126,7 @@
         var serviceCategoriesref = database.collection('provider_categories').where('sectionId', '==', section_id).where("publish", "==", true).where('level', '==', 0).limit(7);
         var bannerref = database.collection('banner_items').where('sectionId', '==', section_id).where("is_publish", "==", true).orderBy('set_order', 'asc');
         var serviceRef = geoFirestore.collection('providers_services').where('sectionId', '==', section_id);
-        var refCurrency = database.collection('currencies').where('isActive', '==', true);
+        var refCurrency = regionCurrencyRef();
         var providerRef = geoFirestore.collection('users').where('role', '==', 'provider').where('active', '==', true);
         var placeholderImageRef = database.collection('settings').doc('placeHolderImage');
         var placeholderImageSrc = '';

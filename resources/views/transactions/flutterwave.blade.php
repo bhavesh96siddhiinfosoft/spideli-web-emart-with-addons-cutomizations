@@ -57,7 +57,7 @@
 window.onload = function() {
     var firestore = firebase.firestore();
     var geoFirestore = new GeoFirestore(firestore);
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     var decimal_degits = 0;
     refCurrency.get().then(async function (snapshots) {
         var currencyData = snapshots.docs[0].data();

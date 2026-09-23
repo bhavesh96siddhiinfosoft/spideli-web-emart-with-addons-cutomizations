@@ -204,7 +204,7 @@
     var currentCurrency = '';
     var currencyAtRight = false;
     var decimal_degits = 0;   
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     refCurrency.get().then(async function (snapshots) {
         if(snapshots.docs.length > 0){
             currencyData = snapshots.docs[0].data();

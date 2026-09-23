@@ -27,7 +27,7 @@
     var currencyAtRight = false;
     var wallet_amount = 0;
     var database = firebase.firestore();
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     var currencyData = "";
     var decimal_degits = 0;
     refCurrency.get().then(async function (snapshots) {

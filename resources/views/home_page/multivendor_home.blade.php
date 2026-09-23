@@ -171,7 +171,7 @@
         var itemCategoriesref = database.collection('vendor_categories').where('section_id', '==', section_id).where("publish", "==", true).limit(7);
         var bannerref = database.collection('banner_items').where('sectionId', '==', section_id).where("is_publish", "==", true).orderBy('set_order', 'asc');
         var vendorsref = geoFirestore.collection('vendors').where('section_id', '==', section_id);
-        var refCurrency = database.collection('currencies').where('isActive', '==', true);
+        var refCurrency = regionCurrencyRef();
         var placeholderImageRef = database.collection('settings').doc('placeHolderImage');
         var placeholderImageSrc = '';
         var enableAdvertisement = false;

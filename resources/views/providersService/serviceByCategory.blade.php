@@ -33,7 +33,7 @@
         $("#title").text(idRefData.title + ' ' + "{{trans('lang.services')}}");
     });
     var decimal_degits = 0;
-    var refCurrency = database.collection('currencies').where('isActive', '==', true);
+    var refCurrency = regionCurrencyRef();
     refCurrency.get().then(async function (snapshots) {
         var currencyData = snapshots.docs[0].data();
         currentCurrency = currencyData.symbol;

@@ -904,6 +904,7 @@ return [
     'locating_you' => 'Finding your location...',
     'location_permission_denied' => 'Location permission was denied. Please enter your address below.',
     'location_unavailable' => 'Your location is not available. Please enter your address below.',
+    'location_needs_https' => 'Your browser only shares your location with sites served over https. Please enter your address below instead.',
     'address_lookup_failed' => 'That location could not be looked up. Please enter your address below.',
     'verify_your_email_address' => 'Verify Your Email Address',
     'a_fresh_verification_link_has_been_sent_to_your_email_address' => 'A fresh verification link has been sent to your email address.',
