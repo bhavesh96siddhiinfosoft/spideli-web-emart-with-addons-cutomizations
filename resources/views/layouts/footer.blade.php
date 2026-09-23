@@ -3422,12 +3422,20 @@
 
     /* The active region, plus any published sibling sharing its country.
      *
-     * The sibling bridge is load-bearing on the current data: the Yaounde
-     * region holds NO stores at all - every store around a Yaounde visitor is
-     * filed under Cameroon - so matching on the region id alone would show
-     * them an empty site. Until the client settles whether Yaounde sits
-     * inside Cameroon or beside it, a shared countryCode is the best
-     * available stand-in for that relationship. */
+     * DECIDED by the client, 23 Sep 2026: regions that share a countryCode
+     * are siblings, and a visitor in one of them sees all of them. This is
+     * the intended behaviour, not a placeholder - do not 'fix' it into a
+     * strict region-id match.
+     *
+     * It is load-bearing on the current data. The Yaounde region holds NO
+     * stores at all - every store around a Yaounde visitor is filed under
+     * Cameroon - so matching on the region id alone would show them an
+     * empty site.
+     *
+     * The consequence to keep in mind: adding a second region inside an
+     * existing country makes each of them show the other's stores. If that
+     * is ever unwanted, the fix is a real parent field on the region, not a
+     * change here. */
     var discoveryRegionIds = [];
 
     async function loadDiscoveryRegionIds() {
