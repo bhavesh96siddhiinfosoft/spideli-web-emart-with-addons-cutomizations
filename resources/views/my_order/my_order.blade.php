@@ -17,6 +17,13 @@
 <section class="py-4 siddhi-main-body">
     <div class="container">
         <div class="row">
+            <div class="col-md-12">
+                {{-- Shown only when the free limit actually hid something. --}}
+                <div id="order_history_notice" class="alert alert-info d-flex align-items-center" style="display:none;">
+                    <span id="order_history_notice_text"></span>
+                    <a href="{{ route('subscription.plans') }}" class="btn btn-primary btn-sm ml-auto">{{ trans('lang.order_history_see_all') }}</a>
+                </div>
+            </div>
             <div class="col-md-12 top-nav mb-3">
                 <ul class="nav nav-tabsa custom-tabsa border-0 bg-white rounded overflow-hidden shadow-sm p-2 c-t-order" id="myTab" role="tablist">
                     <li class="nav-item" role="presentation">
@@ -288,6 +295,9 @@
     
     async function getOrders() {
         completedorsersref.get().then(async function(completedorderSnapshots) {
+            /* Each tab caps itself - see limitOrderHistory below. */
+            var orders = completedorderSnapshots;
+
             completed_orders = document.getElementById('completed_orders');
             pending_orders = document.getElementById('pending_orders');
             rejected_orders = document.getElementById('rejected_orders');
@@ -296,15 +306,47 @@
             pending_orders.innerHTML = '';
             rejected_orders.innerHTML = '';
             canceled_orders.innerHTML = '';
-            completedOrderHtml = await buildHTMLCompletedOrders(completedorderSnapshots);
-            pendingOrderHtml = await buildHTMLPendingOrders(completedorderSnapshots);
-            rejectedOrdersHtml = await buildHTMLRejectedOrders(completedorderSnapshots);
-            canceledOrdersHtml = await buildHTMLCanceledOrders(completedorderSnapshots);
+            completedOrderHtml = await buildHTMLCompletedOrders(orders);
+            pendingOrderHtml = await buildHTMLPendingOrders(orders);
+            rejectedOrdersHtml = await buildHTMLRejectedOrders(orders);
+            canceledOrdersHtml = await buildHTMLCanceledOrders(orders);
             completed_orders.innerHTML = completedOrderHtml;
             pending_orders.innerHTML = pendingOrderHtml;
             rejected_orders.innerHTML = rejectedOrdersHtml;
             canceled_orders.innerHTML = canceledOrdersHtml;
         })
+    }
+
+    /* Narrows one tab's orders to its own statuses and applies the free
+ * order-history limit to THAT tab.
+ *
+ * Per tab rather than across the whole history, by the client's decision
+ * on 24 Sep: capping the combined set left a customer with older completed
+ * orders staring at an empty Completed tab.
+ *
+ * `orders` arrives newest first, because the query orders by createdAt
+ * descending. A customer whose plan carries features.fullOrderHistory, or
+ * everyone if the limit is switched off in the admin panel, sees the lot. */
+    async function limitOrderHistory(orders, statuses) {
+        var matching = orders.filter(function (order) {
+            return statuses.indexOf(order.status) !== -1;
+        });
+
+        if (await hasFullOrderHistory()) {
+            return matching;
+        }
+
+        var freeLimit = await freeOrderHistoryLimit();
+        if (freeLimit <= 0 || matching.length <= freeLimit) {
+            return matching;
+        }
+
+        $('#order_history_notice_text').text(
+            "{{ trans('lang.order_history_limited') }}".replace(':count', freeLimit)
+        );
+        $('#order_history_notice').show();
+
+        return matching.slice(0, freeLimit);
     }
 
     async function buildHTMLCompletedOrders(completedorderSnapshots) {
@@ -318,6 +360,11 @@
                 datas.id = listval.id;
                 alldata.push(datas);
             });
+
+            /* The free order-history limit, applied PER TAB: this customer
+             * sees their most recent N of THIS status, so no tab is left
+             * empty while older orders of that kind exist. */
+            alldata = await limitOrderHistory(alldata, ['Order Completed']);
             for (const listval of alldata) {
 
                 var val = listval;
@@ -571,6 +618,11 @@
                 datas.id = listval.id;
                 alldata.push(datas);
             });
+
+            /* The free order-history limit, applied PER TAB: this customer
+             * sees their most recent N of THIS status, so no tab is left
+             * empty while older orders of that kind exist. */
+            alldata = await limitOrderHistory(alldata, ['Order Placed', 'Order Accepted', 'Driver Pending', 'Order Shipped', 'In Transit']);
             
             for (const listval of alldata) {
 
@@ -790,6 +842,11 @@
                 datas.id = listval.id;
                 alldata.push(datas);
             });
+
+            /* The free order-history limit, applied PER TAB: this customer
+             * sees their most recent N of THIS status, so no tab is left
+             * empty while older orders of that kind exist. */
+            alldata = await limitOrderHistory(alldata, ['Driver Rejected', 'Order Rejected']);
             
             for (const listval of alldata) {
                 var val = listval;
@@ -1008,6 +1065,11 @@
                 datas.id = listval.id;
                 alldata.push(datas);
             });
+
+            /* The free order-history limit, applied PER TAB: this customer
+             * sees their most recent N of THIS status, so no tab is left
+             * empty while older orders of that kind exist. */
+            alldata = await limitOrderHistory(alldata, ['Order Cancelled']);
             for (const listval of alldata) {
                 var val = listval;
                 /* An order reads in the currency of the region it was placed

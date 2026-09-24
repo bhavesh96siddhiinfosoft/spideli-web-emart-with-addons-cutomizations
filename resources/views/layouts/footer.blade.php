@@ -3262,6 +3262,84 @@
         return cleared;
     }
 
+    /* ---- The free order-history limit ------------------------------------
+ * A customer sees their most recent settings/OrderHistory.freeOrderLimit
+ * orders, unless they hold a customer subscription whose plan carries
+ * features.fullOrderHistory.
+ *
+ * Specified in the admin panel's docs/app-spec-customer-subscription.md.
+ * -------------------------------------------------------------------- */
+
+    var orderHistorySettingsPromise = null;
+
+    function loadOrderHistorySettings() {
+        if (orderHistorySettingsPromise === null) {
+            orderHistorySettingsPromise = (async function () {
+                try {
+                    var snapshot = await database.collection('settings').doc('OrderHistory').get();
+                    return snapshot.exists ? snapshot.data() : null;
+                } catch (err) {
+                    return null;
+                }
+            })();
+        }
+        return orderHistorySettingsPromise;
+    }
+
+    /* Whether this customer has bought the full history and it has not
+     * lapsed. The fields are the same ones a vendor subscription uses. */
+    async function hasFullOrderHistory() {
+        if (cuser_id == '') {
+            return false;
+        }
+        try {
+            var snapshot = await database.collection('users').doc(cuser_id).get();
+            var user = snapshot.exists ? snapshot.data() : null;
+            var plan = user ? user.subscription_plan : null;
+            if (!plan) {
+                return false;
+            }
+            /* A vendor plan sitting on the record never counts, and an
+             * absent planFor means vendor. */
+            if (plan.planFor !== 'customer') {
+                return false;
+            }
+            var expiry = user.subscriptionExpiryDate;
+            if (expiry) {
+                var expiryDate = expiry.toDate ? expiry.toDate() : new Date(expiry);
+                if (expiryDate < new Date()) {
+                    return false;
+                }
+            }
+            return !!(plan.features && plan.features.fullOrderHistory === true);
+        } catch (err) {
+            /* Fail OPEN. A failed lookup must never hide a customer's own
+             * orders from them - that would read as lost data. */
+            return true;
+        }
+    }
+
+    /* How many orders an unsubscribed customer may see. 0 means no limit.
+     *
+     * A MISSING settings document means the limit is ON at 5, not off. That
+     * is what app-spec-region-features.md tells the App developer to do, and
+     * both sides have to agree or the same customer sees a different history
+     * in the app and on the web. The admin panel writes the document with
+     * these same defaults the first time that screen is opened. */
+    var ORDER_HISTORY_DEFAULT_LIMIT = 5;
+
+    async function freeOrderHistoryLimit() {
+        var settings = await loadOrderHistorySettings();
+        if (!settings) {
+            return ORDER_HISTORY_DEFAULT_LIMIT;
+        }
+        if (settings.isLimitEnabled === false) {
+            return 0;
+        }
+        var limit = parseInt(settings.freeOrderLimit, 10);
+        return (isNaN(limit) || limit < 0) ? ORDER_HISTORY_DEFAULT_LIMIT : limit;
+    }
+
     /* ---- Currency by region ----------------------------------------------
      * Ported from the admin panel's layouts/app.blade.php.
      *

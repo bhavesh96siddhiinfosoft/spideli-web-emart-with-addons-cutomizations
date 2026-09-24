@@ -913,6 +913,8 @@ return [
     'subscription_days' => 'days',
     'subscription_none_available' => 'There are no plans available in your area at the moment.',
     'subscription_wallet_balance' => 'Wallet balance',
+    'order_history_limited' => 'You are seeing your :count most recent orders.',
+    'order_history_see_all' => 'See your complete history',
     'subscription_pay_with_wallet' => 'Subscribe using wallet',
     'subscription_insufficient' => 'Not enough in your wallet',
     'subscription_top_up' => 'Top up your wallet',
