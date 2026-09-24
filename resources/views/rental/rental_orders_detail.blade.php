@@ -158,6 +158,9 @@
                                         class="float-right text-total-price"><span
                                             class="currency-symbol-left total_"></span><span></span><span
                                             class="currency-symbol-right" style="display: none;"></span></p></h6>
+                            <button type="button" class="btn btn-outline-primary btn-sm btn-block mt-3 download-receipt-btn" style="display:none;">
+                                <i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}
+                            </button>
                         </div>
                         <div class="carbook-payment-option carbook-detail-right mt-3 mb-3" style="display:none">
                             <h3>{{trans('lang.Select_Payment')}}</h3>
@@ -308,6 +311,7 @@
     <!-- End Add review -->
 </section>
 @include('layouts.footer')
+@include('partials.order_receipt')
 @include('layouts.nav')
 <script type="text/javascript">
     var append_categories = '';
@@ -324,6 +328,10 @@
     var currencyAtRight = false;
     var currencyData = "";
     var decimal_degits = 0;
+    /* The order's own currency. Declared here, not inside the fetch,
+     * because renderTaxSection() below is a top-level function and reads
+     * it. */
+    var orderCurrency = {};
     var refCurrency = regionCurrencyRef();
     refCurrency.get().then(async function (snapshots) {
         currencyData = snapshots.docs[0].data();
@@ -536,7 +544,7 @@
              * placed in. rental_orders carries its own regionId. The wallet
              * balance further down is deliberately NOT changed - that is the
              * customer's own single pot of money, not this order's. */
-            var orderCurrency = await getCurrencyForRegion(order.regionId);
+            orderCurrency = await getCurrencyForRegion(order.regionId);
             if (order.status == 'Order Completed') {
                 $('.add-review-div').show();
             }
@@ -572,11 +580,11 @@
                 rentalPackageDetail += `<li><label>Order Booking Id: </label>${order.rentalPackageModel.id}</li>`;
                 rentalPackageDetail += `<li><label>{{trans("lang.package_name")}}: </label>${order.rentalPackageModel.name}</li>`;
                 rentalPackageDetail += `<li><label>{{trans("lang.package_description")}}: </label>${order.rentalPackageModel.description}</li>`;
-                rentalPackageDetail += `<li><label>{{trans("lang.package_basefare_price")}}: </label>${getFormattedPrice(parseFloat(order.rentalPackageModel.baseFare))}</li>`;
+                rentalPackageDetail += `<li><label>{{trans("lang.package_basefare_price")}}: </label>${formatCurrency(parseFloat(order.rentalPackageModel.baseFare), orderCurrency)}</li>`;
                 rentalPackageDetail += `<li><label>{{trans("lang.package_included_hours")}}: </label>${includedHours}h</li>`;
                 rentalPackageDetail += `<li><label>{{trans("lang.package_included_distance")}}: </label>${includedDistance}Km</li>`;
-                rentalPackageDetail += `<li><label>{{trans("lang.package_extra_km_fare")}}: </label>${getFormattedPrice(parseFloat(order.rentalPackageModel.extraKmFare))}</li>`;
-                rentalPackageDetail += `<li><label>{{trans("lang.package_extra_minute_fare")}}: </label>${getFormattedPrice(parseFloat(order.rentalPackageModel.extraMinuteFare))}</li>`;
+                rentalPackageDetail += `<li><label>{{trans("lang.package_extra_km_fare")}}: </label>${formatCurrency(parseFloat(order.rentalPackageModel.extraKmFare), orderCurrency)}</li>`;
+                rentalPackageDetail += `<li><label>{{trans("lang.package_extra_minute_fare")}}: </label>${formatCurrency(parseFloat(order.rentalPackageModel.extraMinuteFare), orderCurrency)}</li>`;
             rentalPackageDetail += `</ul>`;
             $(".package-details").html(rentalPackageDetail)
 
@@ -679,15 +687,78 @@
                 $('.taxes').html('<hr>' + taxHtml);
             }
             
-            $('.basefare_price').html(getFormattedPrice(parseFloat(order.rentalPackageModel.baseFare)));
+            $('.basefare_price').html(formatCurrency(parseFloat(order.rentalPackageModel.baseFare), orderCurrency));
             $('.extra_km').text(`(${extraKm} Km)`);
             $('.extra_min').text(`(${extraMinutes} Min)`);
-            $('.extra_km_charge').html(getFormattedPrice(parseFloat(extraKmCharge)));
-            $('.extra_min_charge').html(getFormattedPrice(parseFloat(extraMinuteCharge)));
-            $('.subtotal_').html(getFormattedPrice(parseFloat(order.subTotal)));
-            $('.discount_').html(getFormattedPrice(parseFloat(order_discount)));
-            $('.platform_charge_').html(getFormattedPrice(parseFloat(platformFee)));
-            $('.total_').html(getFormattedPrice(parseFloat(order_total)));
+            $('.extra_km_charge').html(formatCurrency(parseFloat(extraKmCharge), orderCurrency));
+            $('.extra_min_charge').html(formatCurrency(parseFloat(extraMinuteCharge), orderCurrency));
+            $('.subtotal_').html(formatCurrency(parseFloat(order.subTotal), orderCurrency));
+            $('.discount_').html(formatCurrency(parseFloat(order_discount), orderCurrency));
+            $('.platform_charge_').html(formatCurrency(parseFloat(platformFee), orderCurrency));
+            $('.total_').html(formatCurrency(parseFloat(order_total), orderCurrency));
+
+            /* Built from the figures this screen just rendered, in the
+             * order's own currency, so the PDF and the page cannot
+             * disagree. A cancelled booking is headed "Order Summary"
+             * rather than "Receipt" - it is not proof of a purchase. */
+            var receiptItems = [{
+                name: order.rentalVehicleType.name + ' - ' + order.rentalPackageModel.name,
+                quantity: 1,
+                price: formatCurrency(parseFloat(order.rentalPackageModel.baseFare), orderCurrency),
+                total: formatCurrency(parseFloat(order.rentalPackageModel.baseFare), orderCurrency)
+            }];
+            if (extraKmCharge > 0) {
+                receiptItems.push({
+                    name: "{{ trans('lang.extra_km_charge') }}" + ' (' + extraKm + ' Km)',
+                    quantity: 1,
+                    price: formatCurrency(extraKmCharge, orderCurrency),
+                    total: formatCurrency(extraKmCharge, orderCurrency)
+                });
+            }
+            if (extraMinuteCharge > 0) {
+                receiptItems.push({
+                    name: "{{ trans('lang.extra_min_charge') }}" + ' (' + extraMinutes + ' Min)',
+                    quantity: 1,
+                    price: formatCurrency(extraMinuteCharge, orderCurrency),
+                    total: formatCurrency(extraMinuteCharge, orderCurrency)
+                });
+            }
+
+            var receiptLines = [
+                { label: "{{ trans('lang.sub_total') }}", value: formatCurrency(parseFloat(order.subTotal), orderCurrency) }
+            ];
+            if (order_discount > 0) {
+                receiptLines.push({ label: "{{ trans('lang.discount') }}", value: formatCurrency(parseFloat(order_discount), orderCurrency) });
+            }
+            if (platformFee > 0) {
+                receiptLines.push({ label: "{{ trans('lang.platform_charge') }}", value: formatCurrency(platformFee, orderCurrency) });
+            }
+            if (total_tax_amount > 0) {
+                receiptLines.push({ label: "{{ trans('lang.total_tax_amount') }}", value: formatCurrency(total_tax_amount, orderCurrency) });
+            }
+
+            var cancelled = /cancel|reject/i.test(order.status || '');
+            orderReceipt = {
+                title: cancelled ? "{{ trans('lang.receipt_summary_title') }}" : "{{ trans('lang.receipt_title') }}",
+                orderNumber: order.id,
+                date: order.bookingDateTime.toDate().toLocaleString('en-US', {
+                    year: 'numeric', month: 'short', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', hour12: true
+                }),
+                status: order.status || '',
+                storeName: order.rentalVehicleType.name,
+                storeAddress: order.sourceLocationName || '',
+                billingName: ((order.author && order.author.firstName) ? order.author.firstName : '') + ' ' + ((order.author && order.author.lastName) ? order.author.lastName : ''),
+                billingAddress: '',
+                items: receiptItems,
+                lines: receiptLines,
+                total: formatCurrency(parseFloat(order_total), orderCurrency),
+                paymentMethod: order.paymentMethod || ''
+            };
+            if (cancelled) {
+                $('.download-receipt-btn').html('<i class="fa fa-download mr-1"></i>' + "{{ trans('lang.receipt_download_summary') }}");
+            }
+            $('.download-receipt-btn').show();
             $('.pickup').html(order.bookingDateTime.toDate().toLocaleString('en-US', {
                 year: 'numeric',
                 month: 'short',

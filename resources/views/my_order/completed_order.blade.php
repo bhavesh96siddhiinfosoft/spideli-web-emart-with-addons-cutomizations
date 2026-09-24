@@ -50,6 +50,11 @@
                                                     : </strong><span id="order-status"></span></label>
                                         </div>
                                         <div class="form-group widt-100 gendetail-col">
+                                            <button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" style="display:none;">
+                                                <i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}
+                                            </button>
+                                        </div>
+                                        <div class="form-group widt-100 gendetail-col">
                                             <label class="control-label"><strong>{{ trans('lang.order_type') }}: </strong><span id="order-type"></span></label>
                                         </div>
                                     </div>
@@ -279,6 +284,7 @@
 </div>
 </section>
 @include('layouts.footer')
+@include('partials.order_receipt')
 @include('layouts.nav')
 
 <script type="text/javascript">
@@ -788,6 +794,10 @@
     var currentCurrency = '';
     var currencyAtRight = false;
     var decimal_degits = 0;
+    /* The order's own currency. Declared here, not inside the fetch,
+     * because renderTaxSection() below is a top-level function and
+     * reads it. */
+    var orderCurrency = {};
     var refCurrency = regionCurrencyRef();
     refCurrency.get().then(async function(snapshots) {
         currencyData = snapshots.docs[0].data();
@@ -798,6 +808,26 @@
         }
     });
 
+    /* Only the lines this screen actually shows. A discount that did not
+     * apply or a tip that was not given is simply absent, on the page and
+     * on the receipt alike. */
+    function receiptSummaryLines() {
+        var lines = [];
+        var add = function (label, selector) {
+            var row = $(selector).closest('.order-summary-row, tr, li, div');
+            var value = $(selector).text();
+            if (value && value.trim() !== '' && row.is(':visible')) {
+                lines.push({ label: label, value: value.trim() });
+            }
+        };
+        add("{{ trans('lang.order_subtotal') }}", '#order-subtotal');
+        add("{{ trans('lang.discount') }}", '#order-discount');
+        add("{{ trans('lang.delivery_charge') }}", '#order-shipping');
+        add("{{ trans('lang.tip_amount') }}", '#order-tip-amount');
+        add("{{ trans('lang.tax') }}", '#total_tax_amount');
+        return lines;
+    }
+
     async function getOrderDetails() {
         jQuery("#overlay").show();
         completedorsersref.get().then(async function(completedorderSnapshots) {
@@ -806,7 +836,7 @@
              * region that order was placed in - not the region the customer
              * happens to be browsing from now. vendor_orders carries its own
              * regionId. */
-            var orderCurrency = await getCurrencyForRegion(orderDetails.regionId);
+            orderCurrency = await getCurrencyForRegion(orderDetails.regionId);
             if (orderDetails.author.id != user_uuid) {
                 window.location.href = '{{ route('login') }}';
             } else {
@@ -947,6 +977,7 @@
                 // Final total
                 let order_total = order_subtotal + deliveryCharge + tip_amount + packagingCharge + platformFee + total_tax_amount;
 
+                var receiptItems = [];
                 order_items += '<tr>';
                 order_items += '<th></th>';
                 order_items += '<th class="prod-name">{{ trans('lang.item_name') }}</th>';
@@ -974,15 +1005,20 @@
                     productPriceTotal_val = "";
                     productExtras_val = "";
 
-                    if (currencyAtRight) {
-                        products_price = basePrice.toFixed(decimal_degits) + "" + currentCurrency;
-                        productPriceTotal_val = parseFloat(productPriceTotal).toFixed(decimal_degits) +"" + currentCurrency;
-                        productExtras_val = parseFloat(productExtras).toFixed(decimal_degits) + "" +currentCurrency;
-                    } else {
-                        products_price = currentCurrency + "" + basePrice.toFixed(decimal_degits);
-                        productPriceTotal_val = currentCurrency + "" + parseFloat(productPriceTotal).toFixed(decimal_degits);
-                        productExtras_val = currentCurrency + "" + parseFloat(productExtras).toFixed(decimal_degits);
-                    }
+                    /* The order's own currency, like every other figure on this
+                     * screen - not the region the customer is browsing from now. */
+                    products_price = formatCurrency(basePrice, orderCurrency);
+                    productPriceTotal_val = formatCurrency(productPriceTotal, orderCurrency);
+                    productExtras_val = formatCurrency(productExtras, orderCurrency);
+
+                    /* The receipt takes the rows the page just built, already
+                     * formatted, so the PDF cannot disagree with the table. */
+                    receiptItems.push({
+                        name: orderDetails.products[i]['name'],
+                        quantity: orderDetails.products[i]['quantity'],
+                        price: products_price,
+                        total: productPriceTotal_val
+                    });
                     
                     var extra_html = '';
                     if (orderDetails.products[i].extras != undefined && orderDetails.products[i].extras != '' && orderDetails.products[i].extras.length > 0) {
@@ -1057,6 +1093,25 @@
                 $('#special_offer_discount').html("(-" + order_special_discount + ")");
                 $("#order-tip-amount").html(order_tip_amount_val);
                 $("#order-total").append(order_total_val);
+
+                /* The receipt is built from the SAME figures this screen just
+                 * rendered, already formatted in the order's own currency, so
+                 * the PDF and the page can never disagree about a total. */
+                orderReceipt = {
+                    title: "{{ trans('lang.receipt_title') }}",
+                    orderNumber: order_number,
+                    date: $("#order-date").text(),
+                    status: order_status,
+                    storeName: (orderDetails.vendor && orderDetails.vendor.title) ? orderDetails.vendor.title : '',
+                    storeAddress: (orderDetails.vendor && orderDetails.vendor.location) ? orderDetails.vendor.location : '',
+                    billingName: $("#billing_name").text(),
+                    billingAddress: $("#billing_line1").text(),
+                    items: receiptItems,
+                    lines: receiptSummaryLines(),
+                    total: order_total_val,
+                    paymentMethod: orderDetails.payment_method || ''
+                };
+                $('.download-receipt-btn').show();
                 if (orderDetails.hasOwnProperty('couponCode') && orderDetails.couponCode != '') {
                     $('.used_coupon_code_div').show();
                     $("#used_coupon_code").html(orderDetails.couponCode);
