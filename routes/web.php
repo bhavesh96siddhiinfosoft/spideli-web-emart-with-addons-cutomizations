@@ -147,6 +147,9 @@ Route::post('gift-card-processing', [App\Http\Controllers\GiftCardController::cl
 Route::get('pay-giftcard', [App\Http\Controllers\GiftCardController::class, 'proccesstopay'])->name('giftcard.pay');
 Route::get('gift-card-success', [App\Http\Controllers\GiftCardController::class, 'success'])->name('giftcard.success');
 Route::get('giftcards', [App\Http\Controllers\GiftCardController::class, 'giftcards'])->name('giftcards');
+
+/* Customer subscriptions - the plan that lifts the free order-history limit. */
+Route::get('subscription-plans', [App\Http\Controllers\SubscriptionController::class, 'index'])->name('subscription.plans');
 Route::post('giftcard-razorpaypayment', [App\Http\Controllers\GiftCardController::class, 'razorpaypayment'])->name('giftcard.razorpaypayment');
 Route::post('giftcard-stripepayment', [App\Http\Controllers\GiftCardController::class, 'processStripePayment'])->name('giftcard.stripepayment');
 Route::post('giftcard-paypalpayment', [App\Http\Controllers\GiftCardController::class, 'processPaypalPayment'])->name('giftcard.paypalpayment');

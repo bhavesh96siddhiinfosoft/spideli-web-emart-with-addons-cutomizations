@@ -66,6 +66,7 @@
             <li><a href="{{route('customize.giftcard')}}"><i class="fa fa-gift mr-2"></i> {{trans('lang.buy_gift_card')}}</a>
             </li>
             <li><a href="{{route('giftcards')}}"><i class="fa fa-gift mr-2"></i> {{trans('lang.my_gift_cards')}}</a></li>
+            <li><a href="{{route('subscription.plans')}}"><i class="fa fa-history mr-2"></i> {{trans('lang.subscription_plans_title')}}</a></li>
             @if (@$_COOKIE['dine_in_active'] && @$_COOKIE['dine_in_active'] == 'true')
                 <li class="dine_in_menu"><a href="{{route('vendors')}}?dinein=1"><i
                                 class="fa fa-list-ul mr-2"></i>{{trans('lang.dine_in_vendor')}}</a></li>
