@@ -321,6 +321,11 @@
             for (const listval of alldata) {
 
                 var val = listval;
+                /* An order reads in the currency of the region it was placed
+                 * in, not the one the customer happens to be browsing from.
+                 * vendor_orders carries its own regionId; getCurrencyForRegion
+                 * caches, so this costs one lookup per region, not per order. */
+                var orderCurrency = await getCurrencyForRegion(val.regionId);
                 
                 if (val.status == "Order Completed") {
 
@@ -451,11 +456,7 @@
                     // Final total
                     let order_total = order_subtotal + deliveryCharge + tip_amount + packagingCharge + platformFee + total_tax_amount;
 
-                    if (currencyAtRight) {
-                        order_total_val = parseFloat(order_total).toFixed(decimal_degits) + '' + currentCurrency;
-                    } else {
-                        order_total_val = currentCurrency + '' + parseFloat(order_total).toFixed(decimal_degits);
-                    }
+                    order_total_val = formatCurrency(order_total, orderCurrency);
 
                     for (let i = 0; i < val.products.length; i++) {
                         productInfo(val.products[i]['id']);
@@ -574,6 +575,11 @@
             for (const listval of alldata) {
 
                 var val = listval;
+                /* An order reads in the currency of the region it was placed
+                 * in, not the one the customer happens to be browsing from.
+                 * vendor_orders carries its own regionId; getCurrencyForRegion
+                 * caches, so this costs one lookup per region, not per order. */
+                var orderCurrency = await getCurrencyForRegion(val.regionId);
                 var order_id = val.id;
                 var view_details = "{{ route('pending_order', ':id') }}";
                 view_details = view_details.replace(':id', 'id=' + order_id);
@@ -698,11 +704,7 @@
 
                     let order_total = order_subtotal + deliveryCharge + tip_amount + packagingCharge + platformFee + total_tax_amount;
 
-                    if (currencyAtRight) {
-                        order_total_val = parseFloat(order_total).toFixed(decimal_degits) + '' + currentCurrency;
-                    } else {
-                        order_total_val = currentCurrency + '' + parseFloat(order_total).toFixed(decimal_degits);
-                    }
+                    order_total_val = formatCurrency(order_total, orderCurrency);
 
                     for (let i = 0; i < val.products.length; i++) {
                         productInfo(val.products[i]['id']);
@@ -791,6 +793,11 @@
             
             for (const listval of alldata) {
                 var val = listval;
+                /* An order reads in the currency of the region it was placed
+                 * in, not the one the customer happens to be browsing from.
+                 * vendor_orders carries its own regionId; getCurrencyForRegion
+                 * caches, so this costs one lookup per region, not per order. */
+                var orderCurrency = await getCurrencyForRegion(val.regionId);
                 var order_id = val.id;
                 var view_details = "{{ route('rejected_order', ':id') }}";
                 view_details = view_details.replace(':id', 'id=' + order_id);
@@ -915,11 +922,7 @@
                     // Final total
                     let order_total = order_subtotal + deliveryCharge + tip_amount + packagingCharge + platformFee + total_tax_amount;
 
-                    if (currencyAtRight) {
-                        order_total_val = parseFloat(order_total).toFixed(decimal_degits) + '' + currentCurrency;
-                    } else {
-                        order_total_val = currentCurrency + '' + parseFloat(order_total).toFixed(decimal_degits);
-                    }
+                    order_total_val = formatCurrency(order_total, orderCurrency);
 
                     for (let i = 0; i < val.products.length; i++) {
                         productInfo(val.products[i]['id']);
@@ -1007,6 +1010,11 @@
             });
             for (const listval of alldata) {
                 var val = listval;
+                /* An order reads in the currency of the region it was placed
+                 * in, not the one the customer happens to be browsing from.
+                 * vendor_orders carries its own regionId; getCurrencyForRegion
+                 * caches, so this costs one lookup per region, not per order. */
+                var orderCurrency = await getCurrencyForRegion(val.regionId);
                 var order_id = val.id;
                 var view_details = "{{ route('cancelled_order', ':id') }}";
                 view_details = view_details.replace(':id', 'id=' + order_id);
@@ -1132,11 +1140,7 @@
                     // Final total
                     let order_total = order_subtotal + deliveryCharge + tip_amount + packagingCharge + platformFee + total_tax_amount;
                 
-                    if (currencyAtRight) {
-                        order_total_val = parseFloat(order_total).toFixed(decimal_degits) + '' + currentCurrency;
-                    } else {
-                        order_total_val = currentCurrency + '' + parseFloat(order_total).toFixed(decimal_degits);
-                    }
+                    order_total_val = formatCurrency(order_total, orderCurrency);
 
                     for (let i = 0; i < val.products.length; i++) {
                         productInfo(val.products[i]['id']);

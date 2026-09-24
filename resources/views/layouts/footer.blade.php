@@ -209,6 +209,12 @@
             }
             return invalidUserIds;
         }
+
+        /* Without this the function returns undefined whenever the section
+         * cookies are not both set, and every caller then does
+         * inValidVendors.includes(...) on undefined - which throws and
+         * leaves the store listings empty. Always hand back an array. */
+        return invalidUserIds;
     }
     async function processBatch(vendorSnapshots, invalidUserIds, role) {
         const vendorPromises = vendorSnapshots.docs.map(vendorDoc => processVendor(vendorDoc, invalidUserIds, role));

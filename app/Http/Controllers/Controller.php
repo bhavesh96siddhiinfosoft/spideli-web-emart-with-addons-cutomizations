@@ -65,6 +65,7 @@ class Controller extends BaseController
     public static function hasLocation()
     {
         return !empty($_COOKIE['section_id'])
+            && !empty($_COOKIE['section_name'])
             && !empty($_COOKIE['service_type'])
             && !empty($_COOKIE['address_name']);
     }

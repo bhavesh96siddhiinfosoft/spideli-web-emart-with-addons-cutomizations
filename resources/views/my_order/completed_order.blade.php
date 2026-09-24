@@ -802,6 +802,11 @@
         jQuery("#overlay").show();
         completedorsersref.get().then(async function(completedorderSnapshots) {
             var orderDetails = completedorderSnapshots.docs[0].data();
+            /* This screen shows ONE order, so it reads in the currency of the
+             * region that order was placed in - not the region the customer
+             * happens to be browsing from now. vendor_orders carries its own
+             * regionId. */
+            var orderCurrency = await getCurrencyForRegion(orderDetails.regionId);
             if (orderDetails.author.id != user_uuid) {
                 window.location.href = '{{ route('login') }}';
             } else {
@@ -925,7 +930,7 @@
                     });
                 });
 
-                $("#total_tax_amount").text(formatCurrency(total_tax_amount,currencyData));
+                $("#total_tax_amount").text(formatCurrency(total_tax_amount, orderCurrency));
                 if(total_tax_amount > 0){
                     $("#order-tax").after("<hr>");
                     renderTaxSection('item', 'Tax on Item Total');
@@ -1033,14 +1038,14 @@
                 
                 order_number = orderDetails['id'];
                 order_status = orderDetails['status'];
-                order_total_val = formatCurrency(order_total, currencyData);
-                order_subtotal_main = formatCurrency(order_subtotal, currencyData);
-                order_discount_val = formatCurrency(order_discount, currencyData);
-                order_shipping_val = formatCurrency(deliveryCharge, currencyData);
-                order_tip_amount_val = formatCurrency(tip_amount, currencyData);
-                order_special_discount = formatCurrency(special_discount, currencyData);
-                order_packaging_charge = formatCurrency(packagingCharge, currencyData);
-                order_platform_charge = formatCurrency(platformFee, currencyData);
+                order_total_val = formatCurrency(order_total, orderCurrency);
+                order_subtotal_main = formatCurrency(order_subtotal, orderCurrency);
+                order_discount_val = formatCurrency(order_discount, orderCurrency);
+                order_shipping_val = formatCurrency(deliveryCharge, orderCurrency);
+                order_tip_amount_val = formatCurrency(tip_amount, orderCurrency);
+                order_special_discount = formatCurrency(special_discount, orderCurrency);
+                order_packaging_charge = formatCurrency(packagingCharge, orderCurrency);
+                order_platform_charge = formatCurrency(platformFee, orderCurrency);
                 
                 $("#order-number").html(order_number);
                 $("#order-status").html(order_status);
@@ -1211,7 +1216,7 @@
             $("#order-tax").append(
                 "<div class='d-flex align-items-center mb-2'>" +
                 "<h6 class='font-weight-bold mb-1'>" + taxlabel + " " + labelSuffix + "</h6>" +
-                "<h6 class='font-weight-bold mb-1 ml-auto'>" + formatCurrency(taxAmount, currencyData) + "</h6>" +
+                "<h6 class='font-weight-bold mb-1 ml-auto'>" + formatCurrency(taxAmount, orderCurrency) + "</h6>" +
                 "</div>"
             );
         }

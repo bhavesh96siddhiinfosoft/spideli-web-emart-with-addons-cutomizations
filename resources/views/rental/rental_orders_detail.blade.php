@@ -532,6 +532,11 @@
         jQuery("#overlay").show();
         completedorsersref.get().then(async function (completedorderSnapshots) {
             order = completedorderSnapshots.docs[0].data();
+            /* The rental order reads in the currency of the region it was
+             * placed in. rental_orders carries its own regionId. The wallet
+             * balance further down is deliberately NOT changed - that is the
+             * customer's own single pot of money, not this order's. */
+            var orderCurrency = await getCurrencyForRegion(order.regionId);
             if (order.status == 'Order Completed') {
                 $('.add-review-div').show();
             }
@@ -669,7 +674,7 @@
                 taxHtml += renderTaxSection('platform', 'Tax on Platform Fee');
                 taxHtml += "<p class='mb-2'>" +
                         "<strong><label>{{trans('lang.total_tax_amount')}}</label></strong>" +
-                        "<strong><span class='float-right text-dark'>" + formatCurrency(total_tax_amount, currencyData) + "</span></strong>" +
+                        "<strong><span class='float-right text-dark'>" + formatCurrency(total_tax_amount, orderCurrency) + "</span></strong>" +
                     "</p>";
                 $('.taxes').html('<hr>' + taxHtml);
             }
@@ -1301,7 +1306,7 @@
             let taxAmount = parseFloat(taxBreakdownGrouped[section][title]);
             html += "<p class='mb-2'>" +
                         "<label>" + taxlabel + " " + labelSuffix + "</label>" +
-                        "<span class='float-right text-dark'>" + formatCurrency(taxAmount, currencyData) + "</span>" +
+                        "<span class='float-right text-dark'>" + formatCurrency(taxAmount, orderCurrency) + "</span>" +
                     "</p>";
         }
         return html;
