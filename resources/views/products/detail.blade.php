@@ -546,6 +546,47 @@
         });
     }
 
+    /* The store writes this with an editor, so it is HTML on purpose - a
+     * price table is the point of the field, and escaping it would leave the
+     * customer reading tags.
+     *
+     * It is still content typed in another panel, so anything that could run
+     * in the customer's browser is taken out first: script and frame tags, and
+     * every on* handler and javascript: URL. A store account must not be able
+     * to run code on a customer.
+     *
+     * Parsing into a detached element does not execute anything by itself,
+     * which is what makes stripping before insertion safe rather than too
+     * late. */
+    function safeWholesaleDetails(html) {
+        if (!html) {
+            return '';
+        }
+
+        var holder = document.createElement('div');
+        holder.innerHTML = html;
+
+        holder.querySelectorAll('script, iframe, object, embed, link, style, form')
+            .forEach(function (node) { node.remove(); });
+
+        holder.querySelectorAll('*').forEach(function (node) {
+            Array.prototype.slice.call(node.attributes).forEach(function (attr) {
+                var name = attr.name.toLowerCase();
+                var value = String(attr.value || '');
+                if (name.indexOf('on') === 0 ||
+                    ((name === 'href' || name === 'src' || name === 'xlink:href') &&
+                        /^\s*javascript:/i.test(value))) {
+                    node.removeAttribute(attr.name);
+                }
+            });
+        });
+
+        /* Only whitespace once the tags are gone is nothing worth a heading. */
+        return holder.textContent.trim() === '' && holder.querySelectorAll('img, table').length === 0
+            ? ''
+            : holder.innerHTML;
+    }
+
     /* The wholesale note under the quantity box.
      *
      * A badge that never changes announces an offer the page then appears not
@@ -1248,6 +1289,21 @@
             html = html + '<div class="description mt-2 mb-3">';
             html = html + '<p>' + vendorProduct.description + '</p>';
             html = html + '</div>';
+
+            /* Whatever the store wants a bulk buyer to know - a price table,
+             * minimum order terms, packaging notes. Only written when the
+             * product has a wholesale tier, and only shown when it says
+             * something. */
+            if (vendorProduct.wholesaleEnabled === true) {
+                var wholesaleDetails = safeWholesaleDetails(vendorProduct.wholesaleDetails);
+                if (wholesaleDetails !== '') {
+                    html = html + '<div class="wholesale-details mt-2 mb-3">';
+                    html = html + '<h3>{{ trans('lang.wholesale_details') }}</h3>';
+                    html = html + '<div class="wholesale-details-body">' + wholesaleDetails + '</div>';
+                    html = html + '</div>';
+                }
+            }
+
             if (isProductDetails) {
                 html = html + '<div class="row quantity-row"><div class="col-6 grams mt-1 mb-1">';
                 html = html + '<h3>{{ trans('lang.grams') }} : <span class="gram quantity-count">' + vendorProduct
