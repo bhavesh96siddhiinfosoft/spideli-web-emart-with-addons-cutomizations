@@ -1,45 +1,54 @@
 @include('layouts.app')
 @include('layouts.header')
+{{-- The mobile bar every other listing screen carries. --}}
+<div class="d-none">
+    <div class="bg-primary p-3 d-flex align-items-center">
+        <a class="toggle togglew toggle-2" href="#"><span></span></a>
+        <h4 class="font-weight-bold m-0 text-white">{{ trans('lang.subscription_plans_title') }}</h4>
+    </div>
+</div>
 <div class="siddhi-popular">
+    {{-- Same wrapper and spacing as All Stores, Dine-in and Offers, so
+         this page sits below the header the way they do rather than
+         against it. --}}
     <div class="container">
+        <div class="py-5">
 
-        <div class="row page-titles mb-3">
-            <div class="col-md-12">
-                <h3 class="font-weight-bold">{{ trans('lang.subscription_plans_title') }}</h3>
-                <p class="text-muted mb-0">{{ trans('lang.subscription_plans_intro') }}</p>
+            <h2 class="font-weight-bold mb-1">{{ trans('lang.subscription_plans_title') }}</h2>
+            <p class="text-muted mb-4">{{ trans('lang.subscription_plans_intro') }}</p>
+
+            {{-- What the customer has right now. Hidden until it is known. --}}
+            <div id="current_subscription" class="mb-3" style="display:none;">
+                <div class="p-3 rounded shadow-sm bg-white">
+                    <h6 class="font-weight-bold mb-1">{{ trans('lang.subscription_current') }}</h6>
+                    <p class="mb-0" id="current_subscription_name"></p>
+                    <p class="mb-0 small" id="current_subscription_expiry"></p>
+                </div>
             </div>
-        </div>
 
-        {{-- What the customer has right now. Hidden until it is known. --}}
-        <div id="current_subscription" class="mb-3" style="display:none;">
-            <div class="p-3 rounded shadow-sm bg-white">
-                <h6 class="font-weight-bold mb-1">{{ trans('lang.subscription_current') }}</h6>
-                <p class="mb-0" id="current_subscription_name"></p>
-                <p class="mb-0 small" id="current_subscription_expiry"></p>
+            <div class="mb-4 p-3 rounded shadow-sm bg-white d-flex align-items-center">
+                <div>
+                    <span class="text-muted small d-block">{{ trans('lang.subscription_wallet_balance') }}</span>
+                    <h6 class="font-weight-bold mb-0" id="wallet_balance">-</h6>
+                </div>
+                <a href="{{ route('transactions') }}" class="btn btn-outline-secondary btn-sm ml-auto">
+                    {{ trans('lang.subscription_top_up') }}
+                </a>
             </div>
-        </div>
 
-        <div class="mb-4 p-3 rounded shadow-sm bg-white d-flex align-items-center">
-            <div>
-                <span class="text-muted small d-block">{{ trans('lang.subscription_wallet_balance') }}</span>
-                <h6 class="font-weight-bold mb-0" id="wallet_balance">-</h6>
+            <div id="subscription_status" class="alert" style="display:none;"></div>
+
+            <div class="text-center py-5 not_found_div" style="display:none;">
+                <p class="font-weight-bold text-dark h5">{{ trans('lang.subscription_none_available') }}</p>
             </div>
-            <a href="{{ route('transactions') }}" class="btn btn-outline-secondary btn-sm ml-auto">
-                {{ trans('lang.subscription_top_up') }}
-            </a>
+
+            <div id="plans_list" class="row"></div>
+
         </div>
-
-        <div id="subscription_status" class="alert" style="display:none;"></div>
-
-        <div class="text-center py-5 not_found_div" style="display:none;">
-            <p class="font-weight-bold text-dark h5">{{ trans('lang.subscription_none_available') }}</p>
-        </div>
-
-        <div id="plans_list" class="row"></div>
-
     </div>
 </div>
 @include('layouts.footer')
+@include('layouts.nav')
 <script type="text/javascript">
     /* Customer subscription plans, and buying one.
      *
@@ -61,43 +70,69 @@
     var walletBalance = 0;
     var regionCurrency = null;
 
+    /* The customer's own record, and what it says about their plan.
+     * Read once and kept, so the card and the summary above it can
+     * never describe different states. */
+    var currentUser = null;
+    var currentPlanId = '';
+    var currentPlanActive = false;
+
     $(document).ready(async function () {
         jQuery("#overlay").show();
 
         await discoveryRegionsReady;
         regionCurrency = await getRegionCurrency();
 
-        await loadWalletBalance();
-        await renderCurrentSubscription();
+        await loadCustomer();
+        renderCurrentSubscription();
         await renderPlans();
 
         jQuery("#overlay").hide();
     });
 
-    async function loadWalletBalance() {
+    /* One read of the customer document. The wallet balance, the plan
+     * they hold and whether it is still in date all come from it. */
+    async function loadCustomer() {
+        currentUser = null;
+        currentPlanId = '';
+        currentPlanActive = false;
+
         if (cuser_id == '') {
             return;
         }
+
         var snapshot = await database.collection('users').doc(cuser_id).get();
-        var user = snapshot.exists ? snapshot.data() : null;
-        walletBalance = parseFloat((user && user.wallet_amount) || 0) || 0;
+        currentUser = snapshot.exists ? snapshot.data() : null;
+        walletBalance = parseFloat((currentUser && currentUser.wallet_amount) || 0) || 0;
         $('#wallet_balance').text(formatCurrency(walletBalance, regionCurrency));
+
+        var plan = currentUser ? currentUser.subscription_plan : null;
+        /* A vendor plan on a customer record must never read as a
+         * customer subscription. Absent planFor means vendor. */
+        if (!plan || plan.planFor !== 'customer') {
+            return;
+        }
+
+        currentPlanId = plan.id || currentUser.subscriptionPlanId || '';
+        currentPlanActive = subscriptionInDate(currentUser.subscriptionExpiryDate);
+    }
+
+    /* No expiry date at all means a plan that never expires, which is
+     * in date - not a missing one. */
+    function subscriptionInDate(expiry) {
+        if (!expiry) {
+            return true;
+        }
+        var date = expiry.toDate ? expiry.toDate() : new Date(expiry);
+        return date >= new Date();
     }
 
     /* The customer's own subscription state, read from their user document -
      * exactly the fields a vendor subscription uses, so the app and the panels
      * read one shape. */
-    async function renderCurrentSubscription() {
-        if (cuser_id == '') {
-            return;
-        }
+    function renderCurrentSubscription() {
+        var plan = currentUser ? currentUser.subscription_plan : null;
 
-        var snapshot = await database.collection('users').doc(cuser_id).get();
-        var user = snapshot.exists ? snapshot.data() : null;
-        var plan = user ? user.subscription_plan : null;
-
-        /* A vendor plan on a customer record must never read as a customer
-         * subscription. Absent planFor means vendor, so it is excluded too. */
         if (!plan || plan.planFor !== 'customer') {
             $('#current_subscription').hide();
             return;
@@ -105,7 +140,7 @@
 
         $('#current_subscription_name').text(plan.name || '');
 
-        var expiry = user.subscriptionExpiryDate;
+        var expiry = currentUser.subscriptionExpiryDate;
         if (!expiry) {
             $('#current_subscription_expiry').text("{{ trans('lang.subscription_never_expires') }}");
         } else {
@@ -173,6 +208,13 @@
         var price = parseFloat(plan.price || 0) || 0;
         var affordable = walletBalance >= price;
 
+        /* held: this is the plan the customer has, and it has not run
+         * out. There is nothing to buy, so the card says so and the
+         * button is shut. An EXPIRED plan of the same id is offered
+         * again, labelled Renew - that is a purchase, not a repeat. */
+        var isCurrent = String(plan.id) === String(currentPlanId);
+        var held = isCurrent && currentPlanActive;
+
         /* expiryDay is days, with "-1" meaning it never expires. The spec is
          * explicit that this already expresses monthly vs annual, so there is
          * no separate billing-period field to read. */
@@ -184,14 +226,29 @@
             ? '<img alt="" src="' + plan.image + '" class="img-fluid rounded mb-3" style="max-height:140px;">'
             : '';
 
-        var button = affordable
-            ? '<button type="button" class="btn btn-primary btn-block subscribe-btn" data-id="' + plan.id + '">' +
-              "{{ trans('lang.subscription_pay_with_wallet') }}" + '</button>'
-            : '<button type="button" class="btn btn-secondary btn-block" disabled>' +
-              "{{ trans('lang.subscription_insufficient') }}" + '</button>';
+        var button;
+        if (held) {
+            button = '<button type="button" class="btn btn-outline-success btn-block" disabled>' +
+                "{{ trans('lang.subscription_current_button') }}" + '</button>';
+        } else if (!affordable) {
+            button = '<button type="button" class="btn btn-secondary btn-block" disabled>' +
+                "{{ trans('lang.subscription_insufficient') }}" + '</button>';
+        } else {
+            button = '<button type="button" class="btn btn-primary btn-block subscribe-btn" data-id="' + plan.id + '">' +
+                (isCurrent
+                    ? "{{ trans('lang.subscription_renew') }}"
+                    : "{{ trans('lang.subscription_pay_with_wallet') }}") + '</button>';
+        }
+
+        var badge = held
+            ? '<span class="badge badge-success align-self-start mb-2">' +
+              "{{ trans('lang.subscription_current_badge') }}" + '</span>'
+            : '';
 
         return '<div class="col-md-4 mb-4">' +
-            '<div class="p-3 rounded shadow-sm bg-white h-100 d-flex flex-column">' +
+            '<div class="p-3 rounded shadow-sm bg-white h-100 d-flex flex-column' +
+            (held ? ' border border-success' : '') + '">' +
+            badge +
             image +
             '<h6 class="font-weight-bold mb-1">' + (plan.name || '') + '</h6>' +
             '<p class="text-muted small flex-grow-1">' + (plan.description || '') + '</p>' +
@@ -204,6 +261,13 @@
     $(document).on('click', '.subscribe-btn', async function () {
         var plan = plansById[$(this).attr('data-id')];
         if (!plan) {
+            return;
+        }
+
+        /* The button is already shut in this case. Checked again here
+         * because this is where the money moves, and a disabled button
+         * is a courtesy, not a guard. */
+        if (String(plan.id) === String(currentPlanId) && currentPlanActive) {
             return;
         }
 
@@ -222,8 +286,8 @@
         try {
             await purchasePlan(plan, price);
             showStatus("{{ trans('lang.subscription_purchased') }}", false);
-            await loadWalletBalance();
-            await renderCurrentSubscription();
+            await loadCustomer();
+            renderCurrentSubscription();
             await renderPlans();
         } catch (err) {
             showStatus(
