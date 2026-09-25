@@ -359,6 +359,9 @@
                         html = html + '<span class="pro-price">' + or_price + '</span>'
                     }
                 }
+                /* The wholesale tier, so a bulk price is visible while browsing
+                 * rather than only on the product page. */
+                html = html + wholesaleBadgeHtml(final_price);
                 html = html + '<div class="star position-relative mt-3"><span class="badge badge-success"><i class="feather-star"></i>' + rating + ' (' + reviewsCount + ')</span></div>';
                 html = html + '</div>';
                 html = html + '</div></div></div>';

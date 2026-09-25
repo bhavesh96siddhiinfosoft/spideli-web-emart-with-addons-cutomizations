@@ -877,6 +877,13 @@
                             var name = $("#name_" + product_id).val();
                             var quantity = $("#quantity_" + product_id).val();
                             var category_id = $("#category_id_" + product_id).val();
+
+                            /* The tier this line was actually charged at. The
+                             * order must never be re-derived from the product
+                             * later - a store changing its wholesale price must
+                             * not alter what a past order says it charged. */
+                            var is_wholesale = $("#is_wholesale_" + product_id).val() === '1';
+                            var wholesale_min_qty = $("#wholesale_min_qty_" + product_id).val() || '';
                             
                             var extras = [];
                             $(".extras_" + product_id).each(function(index) {
@@ -915,7 +922,15 @@
                                 'name': name,
                                 'photo': photo,
                                 'price': price,
-                                'discountPrice': dis_price,
+                                /* Every reader - the order screens, the PDF
+                                 * receipt, the admin panel, the app - already
+                                 * takes discountPrice when it is set, so the
+                                 * charged price goes here and they are all
+                                 * correct with no change. Overridden only on a
+                                 * wholesale line; otherwise unchanged. */
+                                'discountPrice': is_wholesale ? item_price : dis_price,
+                                'isWholesale': is_wholesale,
+                                'wholesaleMinQty': wholesale_min_qty,
                                 'quantity': parseInt(quantity),
                                 'vendorID': vendorDetails.id,
                                 'extras_price': extras_price,

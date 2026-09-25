@@ -296,6 +296,7 @@
                     html = html + '<span class="pro-price">' + or_price + '</span>'
                 }
 
+                html = html + wholesaleBadgeHtml(final_price);
                 html = html + '<div class="star position-relative mt-3"><span class="badge badge-success"><i class="feather-star"></i>' + rating + ' (' + reviewsCount + ')</span></div>';
                 html = html + '</div>';
                 html = html + '</div></div></div>';

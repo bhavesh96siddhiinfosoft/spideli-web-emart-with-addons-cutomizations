@@ -275,6 +275,14 @@
             var item_price = (dis_price > 0) ? dis_price : price;
 
             var stock_quantity = $('#quantity_' + id).val();
+
+            /* The quantity break travels with the line so the cart can
+             * reprice it when the quantity changes, not only now. The
+             * server decides the price from these; the browser only
+             * reports what the product offers. */
+            var wholesale_price = $('#wholesale_price_' + id).val() || '';
+            var wholesale_min_qty = $('#wholesale_min_qty_' + id).val() || '';
+
             var variant_info = {};
             if ($('#variation_info_' + id).length > 0) {
                 var element = $('#variation_info_' + id).find('#variant_price');
@@ -300,6 +308,13 @@
 
                 item_price = variant_price > 0 ? variant_price : item_price;
                 price = variant_price > 0 ? variant_price : price;
+
+                /* The chosen variant's own wholesale price wins over the
+                 * product's, the same way the store panel resolves it. */
+                var variant_wholesale = $('#variation_info_' + id).find('#variant_price').attr('data-vwprice');
+                if (variant_wholesale !== undefined && variant_wholesale !== '') {
+                    wholesale_price = variant_wholesale;
+                }
                 
             } else {
                 if (stock_quantity != undefined && stock_quantity != -1 && parseInt(quantity) > parseInt(
@@ -373,6 +388,8 @@
                 vendor_longitude,
                 variant_info,
                 category_id,
+                wholesale_price,
+                wholesale_min_qty,
                 specialOfferForHour,
                 decimal_degits,
                 distanceType,
@@ -529,6 +546,72 @@
         });
     }
 
+    /* The wholesale note under the quantity box.
+     *
+     * A badge that never changes announces an offer the page then appears not
+     * to honour: the customer sets the quantity to the minimum and the price
+     * above does not move, so the tier looks like decoration until the cart.
+     * This says where the customer actually stands - how many more units are
+     * needed, or that the price is now theirs.
+     *
+     * The price the CART will charge is still decided on the server; this only
+     * reports it. */
+    function updateWholesaleNote(id) {
+        var holder = $('#wholesale_note_' + id);
+        if (holder.length === 0) {
+            return;
+        }
+
+        var minQty = parseInt($('#wholesale_min_qty_' + id).val() || 0) || 0;
+        var price = $('#wholesale_price_' + id).val() || '';
+
+        /* A chosen variant's own wholesale price wins over the product's, the
+         * same way the cart resolves it. */
+        var variantPrice = $('#variation_info_' + id).find('#variant_price').attr('data-vwprice');
+        if (variantPrice !== undefined && variantPrice !== '') {
+            price = variantPrice;
+        }
+
+        if (price === '' || minQty <= 0 || isNaN(parseFloat(price))) {
+            holder.html('');
+            return;
+        }
+
+        var quantity = parseInt($('input[name="quantity_' + id + '"]').val() || 0) || 0;
+        var formatted = getProductFormattedPrice(parseFloat(price));
+
+        if (quantity >= minQty) {
+            holder.html('<span class="badge badge-success p-2">' +
+                "{{ trans('lang.wholesale_applied_each') }}".replace(':price', formatted) +
+                '</span>');
+            return;
+        }
+
+        var remaining = minQty - quantity;
+        holder.html('<span class="badge badge-info p-2">' +
+            "{{ trans('lang.wholesale') }}" + ' ' + formatted + ' ' +
+            "{{ trans('lang.wholesale_from_units') }}".replace(':count', minQty) +
+            ' &middot; ' +
+            "{{ trans('lang.wholesale_add_more') }}".replace(':count', remaining) +
+            '</span>');
+    }
+
+    /* The stepper lives in siddhi.js and writes the new value on click, so the
+     * note is refreshed after that handler has run rather than before it. */
+    $(document).on('click', '.quantity .inc, .quantity .dec', function () {
+        var id = $('.add-to-cart').first().attr('data-id');
+        if (id) {
+            setTimeout(function () { updateWholesaleNote(id); }, 0);
+        }
+    });
+
+    $(document).on('change keyup', '.quantity input.count-number-input', function () {
+        var id = $('.add-to-cart').first().attr('data-id');
+        if (id) {
+            updateWholesaleNote(id);
+        }
+    });
+
     function getProductDetail() {
         jQuery("#overlay").show();
         productsRef.get().then(async function (snapshots) {
@@ -539,6 +622,8 @@
                 if (html != '') {
                     var append_list = document.getElementById('product-detail');
                     append_list.innerHTML = html;
+                    /* The note starts at the quantity the box starts at. */
+                    updateWholesaleNote(snapshots.id);
                     jQuery("#overlay").hide();
 
                     const vendorProduct = snapshots.data();
@@ -1233,7 +1318,7 @@
 
                     html += '<label class="custom-control-label" for="' + vendorProduct.id + '_extra_' + total + '">'
                         + vendorProduct.addOnsTitle[total] +
-                        ' <span class="">+$' + FINAL_ADDON_PRICE + '</span></label>';
+                        ' <span class="">+' + getProductFormattedPrice(FINAL_ADDON_PRICE) + '</span></label>';
 
                     html += '</div>';
                     html += '</div>';
@@ -1260,6 +1345,28 @@
 
             var main_price = final_price.price || 0;
             var dis_price = final_price.dis_price || 0;
+
+            /* The wholesale tier, already carrying the admin commission -
+             * see processVendorData(). A product with variants shows the
+             * cheapest tier, matching how the card shows a price range; the
+             * exact one is picked when a variant is chosen. */
+            var wholesale_price = '';
+            var wholesale_min_qty = '';
+            if (final_price.wholesaleEnabled && final_price.wholesaleMinQty > 0) {
+                wholesale_min_qty = final_price.wholesaleMinQty;
+                if (final_price.wholesale_variants) {
+                    var tiers = Object.values(final_price.wholesale_variants)
+                        .filter(function (v) { return v !== null && !isNaN(v); });
+                    if (tiers.length > 0) {
+                        wholesale_price = Math.min.apply(null, tiers);
+                    }
+                } else if (final_price.wholesale_price !== null && final_price.wholesale_price !== undefined) {
+                    wholesale_price = final_price.wholesale_price;
+                }
+                if (wholesale_price === '') {
+                    wholesale_min_qty = '';
+                }
+            }
             if (
                 vendorProduct.item_attribute &&
                 vendorProduct.item_attribute.attributes &&
@@ -1271,6 +1378,12 @@
                 dis_price = 0;
             }
 
+            /* Shown before the customer commits to a quantity. A tier the
+             * customer only meets at checkout is not an offer. */
+            if (wholesale_price !== '') {
+                html += '<div class="product-wholesale mb-2" id="wholesale_note_' + vendorProduct.id + '"></div>';
+            }
+
             html = html + '<div class="addtocart mt-2 mb-3">';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block' >{{trans('lang.add_to_cart')}}</button>";
             html += '<input type="hidden" name="name_' + vendorProduct.id + '" id="name_' + vendorProduct.id + '" value="' + vendorProduct.name + '">';
@@ -1280,6 +1393,8 @@
             html += '<input type="hidden" id="image_' + vendorProduct.id + '" name="image_' + vendorProduct.id + '" value="' + vendorProduct.photo + '">';
             html += '<input type="hidden" id="veg_' + vendorProduct.id + '" name="veg_' + vendorProduct.id + '" value="' + vendorProduct.veg + '">';
             html += '<input type="hidden" id="category_id_' + vendorProduct.id + '" name="category_id_' + vendorProduct.id + '" value="' + vendorProduct.categoryID + '">';
+            html += '<input type="hidden" id="wholesale_price_' + vendorProduct.id + '" value="' + wholesale_price + '">';
+            html += '<input type="hidden" id="wholesale_min_qty_' + vendorProduct.id + '" value="' + wholesale_min_qty + '">';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block booknow' >{{trans('lang.book_now')}}</button>";
             html = html + '<div class="description mt-2 mb-3">';
             html = html + '</div>';
@@ -1512,6 +1627,12 @@
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').html(pro_price);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vid', variant_id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vprice', variant_price);
+                /* This variant's own wholesale price, so the add-to-cart
+                 * handler sends the tier that actually applies to it. */
+                $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vwprice',
+                    (final_price.wholesale_variants && final_price.wholesale_variants[variant_id] != null)
+                        ? final_price.wholesale_variants[variant_id] : '');
+                updateWholesaleNote(vendorProduct.id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vqty', variant_quantity);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vsku', variant_sku);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vimg', variant_img);
@@ -1581,6 +1702,12 @@
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').html(pro_price);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vid', variant_id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vprice', variant_price);
+                /* This variant's own wholesale price, so the add-to-cart
+                 * handler sends the tier that actually applies to it. */
+                $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vwprice',
+                    (final_price.wholesale_variants && final_price.wholesale_variants[variant_id] != null)
+                        ? final_price.wholesale_variants[variant_id] : '');
+                updateWholesaleNote(vendorProduct.id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vqty', variant_quantity);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vsku', variant_sku);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vimg', variant_image);

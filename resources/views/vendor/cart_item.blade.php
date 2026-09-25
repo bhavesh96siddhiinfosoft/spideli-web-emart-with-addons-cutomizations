@@ -58,6 +58,8 @@ foreach ($cart['item'] as $key => $value_vendor) {
         <input type="hidden" id="quantity_<?php echo @$key1; ?>" value="<?php echo $value_item['quantity']; ?>">
         <input type="hidden" id="variant_info_<?php echo @$key1; ?>" value="<?php echo @$value_item['variant_info'] ? base64_encode(json_encode($value_item['variant_info'])) : ''; ?>">
         <input type="hidden" id="category_id_<?php echo @$key1; ?>" value="<?php echo $value_item['category_id']; ?>">
+        <input type="hidden" id="is_wholesale_<?php echo @$key1; ?>" value="<?php echo !empty($value_item['is_wholesale']) ? '1' : '0'; ?>">
+        <input type="hidden" id="wholesale_min_qty_<?php echo @$key1; ?>" value="<?php echo @$value_item['wholesale_min_qty']; ?>">
         
         <div class="media align-items-center col-md-6">
             
@@ -100,6 +102,11 @@ foreach ($cart['item'] as $key => $value_vendor) {
                 <?php } ?>
                 <input type="hidden" id="extras_price_<?php echo @$key1; ?>" value="<?php echo @$value_item['extra_price']; ?>">
                 <input type="hidden" id="vegs_<?php echo @$key1; ?>" value="<?php echo @$value_item['veg']; ?>">
+                <?php if(@$value_item['is_wholesale']){ ?>
+                    <div class="item-wholesale">
+                        <span class="badge badge-info">{{ trans('lang.wholesale_applied') }}</span>
+                    </div>
+                <?php } ?>
                 <?php if(@$value_item['taxLabel']){ ?>
                     <div class="item-tax">
                         <span class="label">{{ trans('lang.tax') }}:</span>&nbsp;

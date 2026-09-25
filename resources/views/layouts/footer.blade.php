@@ -2772,10 +2772,85 @@
                 };
             }
         }
+        /* The wholesale tier, carried on the same object as every other
+         * price so each screen gets it from the one lookup it already
+         * does.
+         *
+         * It goes through the SAME admin commission as the retail price.
+         * Without that a bulk line would quietly skip the platform's cut -
+         * and the bigger the order, the more it would skip.
+         *
+         * Added after the branches above, not inside them, because
+         * final_price is reassigned wholesale in several of them. */
+        final_price.wholesaleEnabled = productData.wholesaleEnabled === true;
+        final_price.wholesaleMinQty = parseInt(productData.wholesaleMinQty || 0) || 0;
+
+        if (final_price.wholesaleEnabled) {
+            var withCommission = function (value) {
+                var amount = parseFloat(value);
+                if (isNaN(amount)) {
+                    return null;
+                }
+                if (commissionData && adminCommissionSettings.enable) {
+                    return commissionData.type === "percentage"
+                        ? amount + (amount * parseFloat(commissionData.commission) / 100)
+                        : amount + parseFloat(commissionData.commission);
+                }
+                return amount;
+            };
+
+            final_price.wholesale_price = withCommission(productData.wholesalePrice);
+
+            /* A variant's own wholesale price wins over the product's, the
+             * same way the store panel resolves it. A variant without one
+             * falls back to the product's. */
+            if (productData.item_attribute && productData.item_attribute.variants?.length > 0) {
+                final_price.wholesale_variants = Object.fromEntries(
+                    productData.item_attribute.variants.map(function (v) {
+                        var own = v.variant_wholesale_price;
+                        var use = (own !== undefined && own !== null && own !== '')
+                            ? own
+                            : productData.wholesalePrice;
+                        return [v.variant_id, withCommission(use)];
+                    })
+                );
+            }
+        }
+
         return {
             productId: productData.id,
             finalPrice: final_price
         };
+    }
+
+    /* The wholesale tier as a badge, from the price object fetchVendorPriceData()
+     * already returns - so a listing shows the bulk price without a second read.
+     * A product with variants shows the CHEAPEST tier, matching how those cards
+     * already show a price range. Returns '' when the product has no tier. */
+    function wholesaleBadgeHtml(finalPrice) {
+        if (!finalPrice || !finalPrice.wholesaleEnabled || !(finalPrice.wholesaleMinQty > 0)) {
+            return '';
+        }
+
+        var amount = null;
+        if (finalPrice.wholesale_variants) {
+            var tiers = Object.values(finalPrice.wholesale_variants)
+                .filter(function (v) { return v !== null && !isNaN(v); });
+            if (tiers.length > 0) {
+                amount = Math.min.apply(null, tiers);
+            }
+        } else if (finalPrice.wholesale_price !== null && finalPrice.wholesale_price !== undefined) {
+            amount = finalPrice.wholesale_price;
+        }
+
+        if (amount === null || isNaN(amount)) {
+            return '';
+        }
+
+        return '<div class="pro-wholesale"><span class="badge badge-info">' +
+            "{{ trans('lang.wholesale') }}" + ' ' + getProductFormattedPrice(parseFloat(amount)) + ' ' +
+            "{{ trans('lang.wholesale_from_units') }}".replace(':count', finalPrice.wholesaleMinQty) +
+            '</span></div>';
     }
 
     function getProductFormattedPrice(price) {

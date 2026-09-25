@@ -134,8 +134,16 @@ class ProductController extends Controller
             "iteam_extra_price" => $req['iteam_extra_price'] ?? null,
             "variant_info" => $req['variant_info'] ?? null,
             "category_id" => $req['category_id'] ?? null,
-            "taxSetting" => $req['taxSetting'] ?? []
+            "taxSetting" => $req['taxSetting'] ?? [],
+            /* The wholesale tier travels with the line so the cart can
+             * reprice it when the quantity changes, not only when it is
+             * added. retail_base_price is what the line falls back to. */
+            "retail_base_price" => $req['item_price'],
+            "wholesale_price" => $req['wholesale_price'] ?? '',
+            "wholesale_min_qty" => $req['wholesale_min_qty'] ?? ''
         ];
+
+        $cart['item'][$vendor_id][$id] = $this->applyWholesalePrice($cart['item'][$vendor_id][$id]);
 
         // Store info
         $cart['vendor'] = [
@@ -285,6 +293,41 @@ class ProductController extends Controller
 
         echo json_encode($res);
         exit;
+    }
+
+    /**
+     * Applies the wholesale quantity break to one cart line.
+     *
+     * A store sets a wholesale unit price and the minimum quantity that
+     * unlocks it. Once the line reaches that quantity EVERY unit on it is
+     * charged at the wholesale price; below it the line falls back to the
+     * retail price, which is kept alongside so the fallback is exact.
+     *
+     * A wholesale price that is not actually cheaper than the retail price
+     * the line already has - a product on promotion, say - is ignored, so
+     * the customer always pays the lower of the two.
+     *
+     * This is the store panel's applyWholesalePrice(), on this panel's cart
+     * keys. The two must resolve a line identically or the same basket
+     * prices differently over the counter and on the website.
+     */
+    private function applyWholesalePrice(array $item)
+    {
+        $retail = $item['retail_base_price'] ?? $item['item_price'];
+        $item['retail_base_price'] = $retail;
+
+        $wholesalePrice = $item['wholesale_price'] ?? '';
+        $minQty = (int) ($item['wholesale_min_qty'] ?? 0);
+
+        $isWholesale = $wholesalePrice !== '' && $wholesalePrice !== null
+            && $minQty > 0
+            && (int) $item['quantity'] >= $minQty
+            && (float) $wholesalePrice < (float) $retail;
+
+        $item['is_wholesale'] = $isWholesale;
+        $item['item_price'] = $isWholesale ? (float) $wholesalePrice : $retail;
+
+        return $item;
     }
 
     public function distance($lat1, $lon1, $lat2, $lon2, $unit)
@@ -609,6 +652,11 @@ class ProductController extends Controller
                 }
             } else {
                 $cart['item'][$vendor_id][$id]['quantity'] = $quantity;
+                /* Crossing the minimum in either direction reprices the
+                 * line. Without this a customer who adds one and then
+                 * raises it to ten in the cart pays retail for all ten -
+                 * the commonest path to a wholesale quantity there is. */
+                $cart['item'][$vendor_id][$id] = $this->applyWholesalePrice($cart['item'][$vendor_id][$id]);
                 Session::put('cart', $cart);
                 Session::save();
             }
