@@ -2801,6 +2801,48 @@
 
             final_price.wholesale_price = withCommission(productData.wholesalePrice);
 
+            /* The price tiers, every one of them carrying the commission.
+             *
+             * A store can set up to five - "from 15 units 3,500 each, from
+             * 100 units 2,500 each" - and the customer is charged the
+             * highest tier their quantity reaches. Sorted smallest first so
+             * every screen can walk the list the same way.
+             *
+             * A product saved before tiers existed has no list, so the older
+             * price and minimum quantity stand in as the single tier they
+             * are. The store panel writes both shapes, so the two normally
+             * agree and this only matters for older products. */
+            final_price.wholesale_tiers = (Array.isArray(productData.wholesaleTiers)
+                    ? productData.wholesaleTiers : [])
+                .map(function (tier) {
+                    return {
+                        minQty: parseInt(tier && tier.minQty) || 0,
+                        price: withCommission(tier && tier.price)
+                    };
+                })
+                .filter(function (tier) {
+                    return tier.minQty > 0 && tier.price !== null && !isNaN(tier.price);
+                })
+                .sort(function (a, b) { return a.minQty - b.minQty; });
+
+            if (final_price.wholesale_tiers.length === 0
+                && final_price.wholesaleMinQty > 0
+                && final_price.wholesale_price !== null
+                && !isNaN(final_price.wholesale_price)) {
+                final_price.wholesale_tiers = [{
+                    minQty: final_price.wholesaleMinQty,
+                    price: final_price.wholesale_price
+                }];
+            }
+
+            /* The entry tier is what a badge advertises and what the older
+             * two fields mean, so they are lined up with the list rather
+             * than left as whatever was stored separately. */
+            if (final_price.wholesale_tiers.length > 0) {
+                final_price.wholesaleMinQty = final_price.wholesale_tiers[0].minQty;
+                final_price.wholesale_price = final_price.wholesale_tiers[0].price;
+            }
+
             /* A variant's own wholesale price wins over the product's, the
              * same way the store panel resolves it. A variant without one
              * falls back to the product's. */
@@ -2821,6 +2863,61 @@
             productId: productData.id,
             finalPrice: final_price
         };
+    }
+
+    /* The tier a given quantity has reached, or null for none.
+     *
+     * The HIGHEST tier that the quantity meets wins, so the list is walked
+     * forwards - it is sorted smallest first - and the last match kept.
+     *
+     * A tier that is not actually cheaper than the price the customer would
+     * otherwise pay is skipped, which is the same test the cart applies on the
+     * server. Pass the retail price to have that checked; leave it out and
+     * every tier is considered.
+     *
+     * This must agree with applyWholesalePrice() in ProductController, or the
+     * page promises one price and the cart charges another. */
+    function wholesaleTierFor(tiers, quantity, retailPrice) {
+        if (!Array.isArray(tiers) || tiers.length === 0) {
+            return null;
+        }
+
+        var qty = parseInt(quantity) || 0;
+        var retail = parseFloat(retailPrice);
+        var applied = null;
+
+        tiers.forEach(function (tier) {
+            if (!tier || !(tier.minQty > 0) || tier.price === null || isNaN(tier.price)) {
+                return;
+            }
+            if (qty < tier.minQty) {
+                return;
+            }
+            if (!isNaN(retail) && !(parseFloat(tier.price) < retail)) {
+                return;
+            }
+            applied = tier;
+        });
+
+        return applied;
+    }
+
+    /* The next tier up from where the customer is now, or null when they are
+     * already on the deepest one. Used to tell them what one more step buys. */
+    function nextWholesaleTier(tiers, quantity) {
+        if (!Array.isArray(tiers) || tiers.length === 0) {
+            return null;
+        }
+
+        var qty = parseInt(quantity) || 0;
+
+        for (var i = 0; i < tiers.length; i++) {
+            if (tiers[i] && tiers[i].minQty > qty) {
+                return tiers[i];
+            }
+        }
+
+        return null;
     }
 
     /* The wholesale tier as a badge, from the price object fetchVendorPriceData()

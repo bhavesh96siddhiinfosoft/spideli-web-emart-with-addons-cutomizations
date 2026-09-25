@@ -140,7 +140,8 @@ class ProductController extends Controller
              * added. retail_base_price is what the line falls back to. */
             "retail_base_price" => $req['item_price'],
             "wholesale_price" => $req['wholesale_price'] ?? '',
-            "wholesale_min_qty" => $req['wholesale_min_qty'] ?? ''
+            "wholesale_min_qty" => $req['wholesale_min_qty'] ?? '',
+            "wholesale_tiers" => $this->normaliseWholesaleTiers($req['wholesale_tiers'] ?? null)
         ];
 
         $cart['item'][$vendor_id][$id] = $this->applyWholesalePrice($cart['item'][$vendor_id][$id]);
@@ -296,16 +297,70 @@ class ProductController extends Controller
     }
 
     /**
+     * Puts a product's price tiers into one predictable shape.
+     *
+     * The store panel and the store app both write `wholesaleTiers` as a list
+     * of `{minQty, price}`, up to five of them. This accepts that list as an
+     * array or as the JSON the browser posts, drops anything unusable, and
+     * sorts it so the smallest quantity comes first. A product saved before
+     * tiers existed has no list at all and is handled by the caller.
+     */
+    private function normaliseWholesaleTiers($raw)
+    {
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $tiers = [];
+        foreach ($raw as $tier) {
+            if (!is_array($tier)) {
+                continue;
+            }
+
+            $minQty = (int) ($tier['minQty'] ?? 0);
+            $price = $tier['price'] ?? '';
+
+            if ($minQty <= 0 || $price === '' || $price === null || !is_numeric($price)) {
+                continue;
+            }
+
+            $tiers[] = ['minQty' => $minQty, 'price' => (float) $price];
+        }
+
+        usort($tiers, function ($a, $b) {
+            return $a['minQty'] <=> $b['minQty'];
+        });
+
+        return $tiers;
+    }
+
+    /**
      * Applies the wholesale quantity break to one cart line.
      *
-     * A store sets a wholesale unit price and the minimum quantity that
-     * unlocks it. Once the line reaches that quantity EVERY unit on it is
-     * charged at the wholesale price; below it the line falls back to the
-     * retail price, which is kept alongside so the fallback is exact.
+     * A store sets one or more price tiers - "from 15 units, 3,500 each; from
+     * 100 units, 2,500 each" - and the line is charged at the tier its
+     * quantity has reached. Every unit on the line gets that price, not only
+     * the units above the threshold. Below the first tier the line falls back
+     * to the retail price, which is kept alongside so the fallback is exact.
      *
-     * A wholesale price that is not actually cheaper than the retail price
-     * the line already has - a product on promotion, say - is ignored, so
-     * the customer always pays the lower of the two.
+     * The HIGHEST tier the quantity reaches wins. The list is sorted smallest
+     * first, so walking it forwards and keeping the last match gives that
+     * without a second pass.
+     *
+     * A product saved before tiers existed carries the older
+     * `wholesale_price` + `wholesale_min_qty` pair instead, which is treated
+     * as a single tier. The panel still writes that pair from tier one, so
+     * both are normally present and agree.
+     *
+     * A tier price that is not actually cheaper than the retail price the
+     * line already has - a product on promotion, say - is ignored, so the
+     * customer always pays the lower of the two. That test is per tier: a
+     * deep tier can still apply when a shallow one has been undercut by a
+     * discount.
      *
      * This is the store panel's applyWholesalePrice(), on this panel's cart
      * keys. The two must resolve a line identically or the same basket
@@ -316,16 +371,37 @@ class ProductController extends Controller
         $retail = $item['retail_base_price'] ?? $item['item_price'];
         $item['retail_base_price'] = $retail;
 
-        $wholesalePrice = $item['wholesale_price'] ?? '';
-        $minQty = (int) ($item['wholesale_min_qty'] ?? 0);
+        $tiers = $this->normaliseWholesaleTiers($item['wholesale_tiers'] ?? []);
 
-        $isWholesale = $wholesalePrice !== '' && $wholesalePrice !== null
-            && $minQty > 0
-            && (int) $item['quantity'] >= $minQty
-            && (float) $wholesalePrice < (float) $retail;
+        /* Nothing but the older pair - treat it as the one tier it is. */
+        if (empty($tiers)) {
+            $legacyPrice = $item['wholesale_price'] ?? '';
+            $legacyMinQty = (int) ($item['wholesale_min_qty'] ?? 0);
 
-        $item['is_wholesale'] = $isWholesale;
-        $item['item_price'] = $isWholesale ? (float) $wholesalePrice : $retail;
+            if ($legacyPrice !== '' && $legacyPrice !== null && is_numeric($legacyPrice) && $legacyMinQty > 0) {
+                $tiers = [['minQty' => $legacyMinQty, 'price' => (float) $legacyPrice]];
+            }
+        }
+
+        $item['wholesale_tiers'] = $tiers;
+
+        $quantity = (int) $item['quantity'];
+        $applied = null;
+
+        foreach ($tiers as $tier) {
+            if ($quantity >= $tier['minQty'] && $tier['price'] < (float) $retail) {
+                $applied = $tier;
+            }
+        }
+
+        $item['is_wholesale'] = $applied !== null;
+        $item['item_price'] = $applied !== null ? $applied['price'] : $retail;
+
+        /* What the line is actually being charged on, as opposed to what the
+         * product offers. The cart badge and the saved order read these, so
+         * an order records the tier the customer really got. */
+        $item['wholesale_applied_min_qty'] = $applied !== null ? $applied['minQty'] : '';
+        $item['wholesale_applied_price'] = $applied !== null ? $applied['price'] : '';
 
         return $item;
     }

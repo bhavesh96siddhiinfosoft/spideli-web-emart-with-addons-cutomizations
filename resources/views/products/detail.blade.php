@@ -282,6 +282,7 @@
              * reports what the product offers. */
             var wholesale_price = $('#wholesale_price_' + id).val() || '';
             var wholesale_min_qty = $('#wholesale_min_qty_' + id).val() || '';
+            var wholesale_tiers = readWholesaleTiers(id);
 
             var variant_info = {};
             if ($('#variation_info_' + id).length > 0) {
@@ -314,6 +315,14 @@
                 var variant_wholesale = $('#variation_info_' + id).find('#variant_price').attr('data-vwprice');
                 if (variant_wholesale !== undefined && variant_wholesale !== '') {
                     wholesale_price = variant_wholesale;
+
+                    /* A variant carries ONE wholesale price, not a list, so the
+                     * product's tiers do not apply to it - they would charge a
+                     * price this variant never offered. It becomes the single
+                     * tier it is, kept at the product's entry quantity. */
+                    wholesale_tiers = wholesale_min_qty
+                        ? [{ minQty: parseInt(wholesale_min_qty) || 0, price: parseFloat(variant_wholesale) }]
+                        : [];
                 }
                 
             } else {
@@ -390,6 +399,7 @@
                 category_id,
                 wholesale_price,
                 wholesale_min_qty,
+                wholesale_tiers,
                 specialOfferForHour,
                 decimal_degits,
                 distanceType,
@@ -587,54 +597,105 @@
             : holder.innerHTML;
     }
 
+    /* The tier list this page put on the hidden input, back as an array.
+     * Returns an empty list rather than throwing when there is nothing there,
+     * which is the normal case for a product with no wholesale pricing. */
+    function readWholesaleTiers(id) {
+        var raw = $('#wholesale_tiers_' + id).val() || '';
+
+        if (raw === '') {
+            return [];
+        }
+
+        try {
+            var tiers = JSON.parse(decodeURIComponent(raw));
+            return Array.isArray(tiers) ? tiers : [];
+        } catch (e) {
+            console.error('wholesale tiers could not be read', e);
+            return [];
+        }
+    }
+
     /* The wholesale note under the quantity box.
      *
      * A badge that never changes announces an offer the page then appears not
      * to honour: the customer sets the quantity to the minimum and the price
      * above does not move, so the tier looks like decoration until the cart.
-     * This says where the customer actually stands - how many more units are
-     * needed, or that the price is now theirs.
+     * This says where the customer actually stands - which tier they are on,
+     * and what the next one up would cost them.
      *
      * The price the CART will charge is still decided on the server; this only
-     * reports it. */
+     * reports it, and it reports it with the same rule - see
+     * wholesaleTierFor() in the footer.
+     *
+     * The retail price is passed in so a tier that a discount has already
+     * undercut is not advertised. The customer pays the lower of the two, and
+     * the note must not promise otherwise. */
     function updateWholesaleNote(id) {
         var holder = $('#wholesale_note_' + id);
         if (holder.length === 0) {
             return;
         }
 
-        var minQty = parseInt($('#wholesale_min_qty_' + id).val() || 0) || 0;
-        var price = $('#wholesale_price_' + id).val() || '';
+        var tiers = readWholesaleTiers(id);
 
-        /* A chosen variant's own wholesale price wins over the product's, the
-         * same way the cart resolves it. */
+        /* A chosen variant's own wholesale price wins over the product's, and
+         * replaces the tier list with itself - a variant has one price, not a
+         * ladder. Same resolution as the cart. */
         var variantPrice = $('#variation_info_' + id).find('#variant_price').attr('data-vwprice');
         if (variantPrice !== undefined && variantPrice !== '') {
-            price = variantPrice;
+            var entryQty = parseInt($('#wholesale_min_qty_' + id).val() || 0) || 0;
+            tiers = entryQty > 0
+                ? [{ minQty: entryQty, price: parseFloat(variantPrice) }]
+                : [];
         }
 
-        if (price === '' || minQty <= 0 || isNaN(parseFloat(price))) {
+        if (tiers.length === 0) {
             holder.html('');
             return;
         }
 
         var quantity = parseInt($('input[name="quantity_' + id + '"]').val() || 0) || 0;
-        var formatted = getProductFormattedPrice(parseFloat(price));
 
-        if (quantity >= minQty) {
-            holder.html('<span class="badge badge-success p-2">' +
-                "{{ trans('lang.wholesale_applied_each') }}".replace(':price', formatted) +
-                '</span>');
-            return;
+        /* What the line would cost per unit without any tier - the discounted
+         * price when there is one, otherwise the plain price. */
+        var price = parseFloat($('input[name="price_' + id + '"]').val()) || 0;
+        var disPrice = parseFloat($('input[name="dis_price_' + id + '"]').val()) || 0;
+        var retail = disPrice > 0 ? disPrice : price;
+
+        var variantRetail = parseFloat($('#variation_info_' + id).find('#variant_price').attr('data-vprice'));
+        if (!isNaN(variantRetail) && variantRetail > 0) {
+            retail = variantRetail;
         }
 
-        var remaining = minQty - quantity;
-        holder.html('<span class="badge badge-info p-2">' +
-            "{{ trans('lang.wholesale') }}" + ' ' + formatted + ' ' +
-            "{{ trans('lang.wholesale_from_units') }}".replace(':count', minQty) +
-            ' &middot; ' +
-            "{{ trans('lang.wholesale_add_more') }}".replace(':count', remaining) +
-            '</span>');
+        var applied = wholesaleTierFor(tiers, quantity, retail);
+        var next = nextWholesaleTier(tiers, quantity);
+
+        var html = '';
+
+        if (applied) {
+            html += '<span class="badge badge-success p-2">' +
+                "{{ trans('lang.wholesale_applied_each') }}"
+                    .replace(':price', getProductFormattedPrice(parseFloat(applied.price))) +
+                '</span>';
+        }
+
+        /* The step up, whether or not a tier is already running - a customer on
+         * the 15 tier should still be told what 100 would cost. Skipped when
+         * the next tier is not actually cheaper than what they pay now. */
+        if (next && (!applied || parseFloat(next.price) < parseFloat(applied.price))) {
+            var remaining = next.minQty - quantity;
+            html += (html === '' ? '' : ' ') +
+                '<span class="badge badge-info p-2">' +
+                "{{ trans('lang.wholesale') }}" + ' ' +
+                getProductFormattedPrice(parseFloat(next.price)) + ' ' +
+                "{{ trans('lang.wholesale_from_units') }}".replace(':count', next.minQty) +
+                ' &middot; ' +
+                "{{ trans('lang.wholesale_add_more') }}".replace(':count', remaining) +
+                '</span>';
+        }
+
+        holder.html(html);
     }
 
     /* The stepper lives in siddhi.js and writes the new value on click, so the
@@ -1423,6 +1484,16 @@
                     wholesale_min_qty = '';
                 }
             }
+
+            /* The full tier list travels with the line so the cart can price
+             * 500 units differently from 15. Encoded because it goes into an
+             * attribute inside a string of HTML being concatenated here. */
+            var wholesale_tiers = '';
+            if (wholesale_price !== ''
+                && Array.isArray(final_price.wholesale_tiers)
+                && final_price.wholesale_tiers.length > 0) {
+                wholesale_tiers = encodeURIComponent(JSON.stringify(final_price.wholesale_tiers));
+            }
             if (
                 vendorProduct.item_attribute &&
                 vendorProduct.item_attribute.attributes &&
@@ -1451,6 +1522,7 @@
             html += '<input type="hidden" id="category_id_' + vendorProduct.id + '" name="category_id_' + vendorProduct.id + '" value="' + vendorProduct.categoryID + '">';
             html += '<input type="hidden" id="wholesale_price_' + vendorProduct.id + '" value="' + wholesale_price + '">';
             html += '<input type="hidden" id="wholesale_min_qty_' + vendorProduct.id + '" value="' + wholesale_min_qty + '">';
+            html += '<input type="hidden" id="wholesale_tiers_' + vendorProduct.id + '" value="' + wholesale_tiers + '">';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block booknow' >{{trans('lang.book_now')}}</button>";
             html = html + '<div class="description mt-2 mb-3">';
             html = html + '</div>';
@@ -1687,7 +1759,8 @@
                  * handler sends the tier that actually applies to it. */
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vwprice',
                     (final_price.wholesale_variants && final_price.wholesale_variants[variant_id] != null)
-                        ? final_price.wholesale_variants[variant_id] : '');
+                        ? final_price.wholesale_variants[variant_id] : '');
+
                 updateWholesaleNote(vendorProduct.id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vqty', variant_quantity);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vsku', variant_sku);
@@ -1762,7 +1835,8 @@
                  * handler sends the tier that actually applies to it. */
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vwprice',
                     (final_price.wholesale_variants && final_price.wholesale_variants[variant_id] != null)
-                        ? final_price.wholesale_variants[variant_id] : '');
+                        ? final_price.wholesale_variants[variant_id] : '');
+
                 updateWholesaleNote(vendorProduct.id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vqty', variant_quantity);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vsku', variant_sku);

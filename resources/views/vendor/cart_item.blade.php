@@ -59,7 +59,16 @@ foreach ($cart['item'] as $key => $value_vendor) {
         <input type="hidden" id="variant_info_<?php echo @$key1; ?>" value="<?php echo @$value_item['variant_info'] ? base64_encode(json_encode($value_item['variant_info'])) : ''; ?>">
         <input type="hidden" id="category_id_<?php echo @$key1; ?>" value="<?php echo $value_item['category_id']; ?>">
         <input type="hidden" id="is_wholesale_<?php echo @$key1; ?>" value="<?php echo !empty($value_item['is_wholesale']) ? '1' : '0'; ?>">
-        <input type="hidden" id="wholesale_min_qty_<?php echo @$key1; ?>" value="<?php echo @$value_item['wholesale_min_qty']; ?>">
+        <?php
+        /* The tier the line is actually being charged on, not the first one the
+           product offers - a line of 500 records the 500 tier. Falls back to the
+           older single-tier field for a cart built before tiers existed. */
+        $appliedMinQty = $value_item['wholesale_applied_min_qty'] ?? '';
+        if ($appliedMinQty === '' || $appliedMinQty === null) {
+            $appliedMinQty = $value_item['wholesale_min_qty'] ?? '';
+        }
+        ?>
+        <input type="hidden" id="wholesale_min_qty_<?php echo @$key1; ?>" value="<?php echo $appliedMinQty; ?>">
         
         <div class="media align-items-center col-md-6">
             
@@ -105,6 +114,9 @@ foreach ($cart['item'] as $key => $value_vendor) {
                 <?php if(@$value_item['is_wholesale']){ ?>
                     <div class="item-wholesale">
                         <span class="badge badge-info">{{ trans('lang.wholesale_applied') }}</span>
+                        <?php if (!empty($appliedMinQty)) { ?>
+                            <span class="badge badge-light"><?php echo str_replace(':count', $appliedMinQty, trans('lang.wholesale_from_units')); ?></span>
+                        <?php } ?>
                     </div>
                 <?php } ?>
                 <?php if(@$value_item['taxLabel']){ ?>
