@@ -24,6 +24,27 @@
                     <a href="{{ route('subscription.plans') }}" class="btn btn-primary btn-sm ml-auto">{{ trans('lang.order_history_see_all') }}</a>
                 </div>
             </div>
+            {{-- The period picker. Hidden unless the customer's plan carries
+                 full order history - a free customer is capped at the most
+                 recent few orders anyway, and letting them step through the
+                 whole history a month at a time would undo that cap. --}}
+            <div class="col-md-12" id="order_period_bar" style="display:none;">
+                <div class="bg-white rounded shadow-sm p-3 mb-3">
+                    <div class="d-flex flex-wrap align-items-center">
+                        <label class="mb-0 mr-2 font-weight-bold" for="order_period">{{ trans('lang.order_history_period') }}</label>
+                        <select id="order_period" class="form-control w-auto mr-2 mb-0">
+                            <option value="all">{{ trans('lang.order_history_period_all') }}</option>
+                        </select>
+                        <div id="order_period_custom" class="d-flex flex-wrap align-items-center" style="display:none;">
+                            <input type="date" id="order_period_from" class="form-control w-auto mr-2 mb-0">
+                            <span class="mr-2">&ndash;</span>
+                            <input type="date" id="order_period_to" class="form-control w-auto mr-2 mb-0">
+                            <button type="button" id="order_period_apply" class="btn btn-primary btn-sm">{{ trans('lang.order_history_period_apply') }}</button>
+                        </div>
+                        <span id="order_period_summary" class="text-muted small ml-auto"></span>
+                    </div>
+                </div>
+            </div>
             <div class="col-md-12 top-nav mb-3">
                 <ul class="nav nav-tabsa custom-tabsa border-0 bg-white rounded overflow-hidden shadow-sm p-2 c-t-order" id="myTab" role="tablist">
                     <li class="nav-item" role="presentation">
@@ -270,6 +291,130 @@
         });
     });
 
+    /* ------------------------------------------------------------------
+     * The order-history period.
+     *
+     * Document 1 asks that a subscriber "choose the month or period for
+     * which they want to view their orders". Both ends are inclusive and
+     * held as timestamps, so a month and a hand-picked range are the same
+     * thing to everything downstream.
+     *
+     * Changing the period re-renders from the snapshot already in hand -
+     * it never re-reads Firestore. The whole history came down in one
+     * query to begin with, so narrowing it is free.
+     * ------------------------------------------------------------------ */
+    var orderSnapshots = null;
+    var orderPeriodFrom = null;
+    var orderPeriodTo = null;
+
+    /* Only the months the customer actually has orders in, newest first,
+     * so no one can pick a month that was always going to be empty. */
+    function populateOrderPeriods(snapshots) {
+        var seen = {};
+        var months = [];
+        snapshots.docs.forEach(function (doc) {
+            var created = doc.data().createdAt;
+            if (!created || typeof created.toDate !== 'function') {
+                return;
+            }
+            var date = created.toDate();
+            var key = date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2);
+            if (!seen[key]) {
+                seen[key] = true;
+                months.push({
+                    key: key,
+                    label: date.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+                });
+            }
+        });
+        months.sort(function (a, b) { return a.key < b.key ? 1 : -1; });
+
+        var select = $('#order_period');
+        months.forEach(function (month) {
+            select.append($('<option>').val('month:' + month.key).text(month.label));
+        });
+        select.append($('<option>').val('custom').text("{{ trans('lang.order_history_period_custom') }}"));
+    }
+
+    /* The picker appears only for a customer entitled to the full history.
+     * hasFullOrderHistory() fails open, so a customer is never shut out of
+     * their own orders because a lookup errored. */
+    async function initOrderPeriod(snapshots) {
+        if (!(await hasFullOrderHistory())) {
+            return;
+        }
+        populateOrderPeriods(snapshots);
+        $('#order_period_bar').show();
+    }
+
+    /* Drops orders outside the chosen period. An order with no usable date
+     * is KEPT - hiding a customer's order because its timestamp is odd
+     * reads as lost data. */
+    function withinOrderPeriod(order) {
+        if (!orderPeriodFrom && !orderPeriodTo) {
+            return true;
+        }
+        if (!order.createdAt || typeof order.createdAt.toDate !== 'function') {
+            return true;
+        }
+        var date = order.createdAt.toDate();
+        if (orderPeriodFrom && date < orderPeriodFrom) { return false; }
+        if (orderPeriodTo && date > orderPeriodTo) { return false; }
+        return true;
+    }
+
+    function setOrderPeriodSummary(label) {
+        $('#order_period_summary').text(label
+            ? "{{ trans('lang.order_history_period_showing') }}".replace(':period', label)
+            : '');
+    }
+
+    $(document).on('change', '#order_period', function () {
+        var value = $(this).val();
+        $('#order_period_custom').toggle(value === 'custom');
+
+        if (value === 'custom') {
+            /* Nothing changes until Apply - a half-entered range would
+             * otherwise blank the list while the customer is still typing. */
+            return;
+        }
+
+        if (value === 'all') {
+            orderPeriodFrom = null;
+            orderPeriodTo = null;
+            setOrderPeriodSummary('');
+        } else {
+            var parts = value.replace('month:', '').split('-');
+            var year = parseInt(parts[0], 10);
+            var month = parseInt(parts[1], 10) - 1;
+            orderPeriodFrom = new Date(year, month, 1, 0, 0, 0, 0);
+            /* Day 0 of the next month is the last day of this one, so a
+             * short month or a leap February needs no special case. */
+            orderPeriodTo = new Date(year, month + 1, 0, 23, 59, 59, 999);
+            setOrderPeriodSummary($(this).find('option:selected').text());
+        }
+        renderOrders();
+    });
+
+    $(document).on('click', '#order_period_apply', function () {
+        var from = $('#order_period_from').val();
+        var to = $('#order_period_to').val();
+        if (!from && !to) {
+            alert("{{ trans('lang.order_history_period_pick_dates') }}");
+            return;
+        }
+        /* Either end on its own is allowed: "since March" and "up to March"
+         * are both reasonable things to ask for. Both ends are inclusive. */
+        orderPeriodFrom = from ? new Date(from + 'T00:00:00') : null;
+        orderPeriodTo = to ? new Date(to + 'T23:59:59') : null;
+        if (orderPeriodFrom && orderPeriodTo && orderPeriodFrom > orderPeriodTo) {
+            alert("{{ trans('lang.order_history_period_bad_range') }}");
+            return;
+        }
+        setOrderPeriodSummary([from, to].filter(Boolean).join(' - '));
+        renderOrders();
+    });
+
     function getActiveTab() {
         const urlParams = new URLSearchParams(window.location.search);
         const activeTab = urlParams.get('activeTab');
@@ -293,28 +438,41 @@
         }
     }
     
+    /* Read once; the period picker re-renders from this. */
     async function getOrders() {
         completedorsersref.get().then(async function(completedorderSnapshots) {
-            /* Each tab caps itself - see limitOrderHistory below. */
-            var orders = completedorderSnapshots;
-
-            completed_orders = document.getElementById('completed_orders');
-            pending_orders = document.getElementById('pending_orders');
-            rejected_orders = document.getElementById('rejected_orders');
-            canceled_orders = document.getElementById('canceled_orders');
-            completed_orders.innerHTML = '';
-            pending_orders.innerHTML = '';
-            rejected_orders.innerHTML = '';
-            canceled_orders.innerHTML = '';
-            completedOrderHtml = await buildHTMLCompletedOrders(orders);
-            pendingOrderHtml = await buildHTMLPendingOrders(orders);
-            rejectedOrdersHtml = await buildHTMLRejectedOrders(orders);
-            canceledOrdersHtml = await buildHTMLCanceledOrders(orders);
-            completed_orders.innerHTML = completedOrderHtml;
-            pending_orders.innerHTML = pendingOrderHtml;
-            rejected_orders.innerHTML = rejectedOrdersHtml;
-            canceled_orders.innerHTML = canceledOrdersHtml;
+            orderSnapshots = completedorderSnapshots;
+            await initOrderPeriod(orderSnapshots);
+            await renderOrders();
         })
+    }
+
+    async function renderOrders() {
+        if (!orderSnapshots) {
+            return;
+        }
+        /* Each tab caps itself - see limitOrderHistory below. */
+        var orders = orderSnapshots;
+
+        completed_orders = document.getElementById('completed_orders');
+        pending_orders = document.getElementById('pending_orders');
+        rejected_orders = document.getElementById('rejected_orders');
+        canceled_orders = document.getElementById('canceled_orders');
+        /* Cleared on every render: the limit may not bite in the
+         * period the customer has just picked. */
+        $('#order_history_notice').hide();
+        completed_orders.innerHTML = '';
+        pending_orders.innerHTML = '';
+        rejected_orders.innerHTML = '';
+        canceled_orders.innerHTML = '';
+        completedOrderHtml = await buildHTMLCompletedOrders(orders);
+        pendingOrderHtml = await buildHTMLPendingOrders(orders);
+        rejectedOrdersHtml = await buildHTMLRejectedOrders(orders);
+        canceledOrdersHtml = await buildHTMLCanceledOrders(orders);
+        completed_orders.innerHTML = completedOrderHtml;
+        pending_orders.innerHTML = pendingOrderHtml;
+        rejected_orders.innerHTML = rejectedOrdersHtml;
+        canceled_orders.innerHTML = canceledOrdersHtml;
     }
 
     /* Narrows one tab's orders to its own statuses and applies the free
@@ -329,7 +487,7 @@
  * everyone if the limit is switched off in the admin panel, sees the lot. */
     async function limitOrderHistory(orders, statuses) {
         var matching = orders.filter(function (order) {
-            return statuses.indexOf(order.status) !== -1;
+            return statuses.indexOf(order.status) !== -1 && withinOrderPeriod(order);
         });
 
         if (await hasFullOrderHistory()) {
