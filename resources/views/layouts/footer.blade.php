@@ -2785,6 +2785,15 @@
         final_price.wholesaleEnabled = productData.wholesaleEnabled === true;
         final_price.wholesaleMinQty = parseInt(productData.wholesaleMinQty || 0) || 0;
 
+        /* The store's three-way choice: "retail", "wholesale" (sold ONLY in
+         * wholesale quantities) or "both". Anything else, including a product
+         * saved before the field existed, is "both" - which is how this panel
+         * behaved before the field arrived, so older products are untouched. */
+        final_price.saleType = ['retail', 'wholesale', 'both']
+            .indexOf(String(productData.saleType || '').toLowerCase()) !== -1
+                ? String(productData.saleType).toLowerCase()
+                : 'both';
+
         if (final_price.wholesaleEnabled) {
             var withCommission = function (value) {
                 var amount = parseFloat(value);
@@ -2924,6 +2933,22 @@
      * already returns - so a listing shows the bulk price without a second read.
      * A product with variants shows the CHEAPEST tier, matching how those cards
      * already show a price range. Returns '' when the product has no tier. */
+    /* The smallest quantity a product may be bought in. Only a
+     * wholesale-only product has one, and it is the ENTRY tier - the cheapest
+     * quantity that unlocks a wholesale price, not the deepest. A store
+     * selling in tens with a better price at fifty still sells tens. */
+    function minimumOrderQuantity(finalPrice) {
+        if (!finalPrice || finalPrice.saleType !== 'wholesale' || !finalPrice.wholesaleEnabled) {
+            return 1;
+        }
+
+        var entry = (Array.isArray(finalPrice.wholesale_tiers) && finalPrice.wholesale_tiers.length > 0)
+            ? parseInt(finalPrice.wholesale_tiers[0].minQty) || 0
+            : parseInt(finalPrice.wholesaleMinQty) || 0;
+
+        return entry > 1 ? entry : 1;
+    }
+
     function wholesaleBadgeHtml(finalPrice) {
         if (!finalPrice || !finalPrice.wholesaleEnabled || !(finalPrice.wholesaleMinQty > 0)) {
             return '';
@@ -2944,10 +2969,21 @@
             return '';
         }
 
-        return '<div class="pro-wholesale"><span class="badge badge-info">' +
+        var html = '<span class="badge badge-info">' +
             "{{ trans('lang.wholesale') }}" + ' ' + getProductFormattedPrice(parseFloat(amount)) + ' ' +
             "{{ trans('lang.wholesale_from_units') }}".replace(':count', finalPrice.wholesaleMinQty) +
-            '</span></div>';
+            '</span>';
+
+        /* Sold in packs - worth knowing from the listing, before the customer
+         * opens the product and finds the quantity box will not go to one. */
+        var minimum = minimumOrderQuantity(finalPrice);
+        if (minimum > 1) {
+            html += ' <span class="badge badge-dark">' +
+                "{{ trans('lang.wholesale_only_minimum') }}".replace(':count', minimum) +
+                '</span>';
+        }
+
+        return '<div class="pro-wholesale">' + html + '</div>';
     }
 
     function getProductFormattedPrice(price) {

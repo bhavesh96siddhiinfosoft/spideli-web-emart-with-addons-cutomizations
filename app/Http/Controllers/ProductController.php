@@ -141,8 +141,16 @@ class ProductController extends Controller
             "retail_base_price" => $req['item_price'],
             "wholesale_price" => $req['wholesale_price'] ?? '',
             "wholesale_min_qty" => $req['wholesale_min_qty'] ?? '',
-            "wholesale_tiers" => $this->normaliseWholesaleTiers($req['wholesale_tiers'] ?? null)
+            "wholesale_tiers" => $this->normaliseWholesaleTiers($req['wholesale_tiers'] ?? null),
+            "sale_type" => $this->normaliseSaleType($req['sale_type'] ?? null)
         ];
+
+        /* A wholesale-only product is not sold singly. The quantity box on
+         * the product page already starts at the minimum, but the request is
+         * the thing that decides, so it is raised here too rather than
+         * trusted. */
+        $cart['item'][$vendor_id][$id]['quantity'] =
+            $this->enforceSaleTypeQuantity($cart['item'][$vendor_id][$id], (int) $req['quantity']);
 
         $cart['item'][$vendor_id][$id] = $this->applyWholesalePrice($cart['item'][$vendor_id][$id]);
 
@@ -404,6 +412,55 @@ class ProductController extends Controller
         $item['wholesale_applied_price'] = $applied !== null ? $applied['price'] : '';
 
         return $item;
+    }
+
+    /**
+     * The store's three-way choice, as written by the item form.
+     *
+     * "retail"    - no wholesale price at all
+     * "wholesale" - sold ONLY in wholesale quantities
+     * "both"      - retail, with a wholesale price once the quantity is met
+     *
+     * Anything else, including a product saved before the field existed,
+     * means "both" - which is exactly how this panel behaved before the field
+     * arrived, so nothing changes under an older product.
+     */
+    private function normaliseSaleType($value)
+    {
+        $value = is_string($value) ? strtolower(trim($value)) : '';
+
+        return in_array($value, ['retail', 'wholesale', 'both'], true) ? $value : 'both';
+    }
+
+    /**
+     * The smallest quantity this line may be bought in.
+     *
+     * Only a wholesale-only line has one, and it is the ENTRY tier - the
+     * cheapest quantity that unlocks a wholesale price, not the deepest. A
+     * store selling in tens with a better price at fifty still sells tens.
+     */
+    private function saleTypeMinimum(array $item)
+    {
+        if (($item['sale_type'] ?? 'both') !== 'wholesale') {
+            return 1;
+        }
+
+        $tiers = $this->normaliseWholesaleTiers($item['wholesale_tiers'] ?? []);
+
+        if (empty($tiers)) {
+            $legacy = (int) ($item['wholesale_min_qty'] ?? 0);
+
+            return $legacy > 1 ? $legacy : 1;
+        }
+
+        return max(1, (int) $tiers[0]['minQty']);
+    }
+
+    private function enforceSaleTypeQuantity(array $item, $quantity)
+    {
+        $minimum = $this->saleTypeMinimum($item);
+
+        return $quantity < $minimum ? $minimum : $quantity;
     }
 
     public function distance($lat1, $lon1, $lat2, $lon2, $unit)
@@ -727,6 +784,11 @@ class ProductController extends Controller
                     Session::save();
                 }
             } else {
+                /* A wholesale-only line cannot be taken below its minimum.
+                 * Zero is handled above and still removes it, so the customer
+                 * is never trapped with a line they cannot shed - they just
+                 * cannot buy five of something sold in tens. */
+                $quantity = $this->enforceSaleTypeQuantity($cart['item'][$vendor_id][$id], (int) $quantity);
                 $cart['item'][$vendor_id][$id]['quantity'] = $quantity;
                 /* Crossing the minimum in either direction reprices the
                  * line. Without this a customer who adds one and then

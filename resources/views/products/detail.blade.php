@@ -282,6 +282,22 @@
              * reports what the product offers. */
             var wholesale_price = $('#wholesale_price_' + id).val() || '';
             var wholesale_min_qty = $('#wholesale_min_qty_' + id).val() || '';
+            var sale_type = $('#sale_type_' + id).val() || 'both';
+            var min_order_qty = parseInt($('#min_order_qty_' + id).val() || 1) || 1;
+
+            /* Sold in packs. The box already starts at the minimum and the
+             * stepper holds the floor, so this only catches a quantity typed
+             * or scripted past both - but it is the last point before the
+             * request, so it is checked here too. */
+            if (parseInt(quantity) < min_order_qty) {
+                Swal.fire({
+                    text: "{{ trans('lang.wholesale_only_minimum') }}".replace(':count', min_order_qty),
+                    icon: "error"
+                });
+                $('input[name="quantity_' + id + '"]').val(min_order_qty);
+                updateWholesaleNote(id);
+                return false;
+            }
             var wholesale_tiers = readWholesaleTiers(id);
 
             var variant_info = {};
@@ -400,6 +416,7 @@
                 wholesale_price,
                 wholesale_min_qty,
                 wholesale_tiers,
+                sale_type,
                 specialOfferForHour,
                 decimal_degits,
                 distanceType,
@@ -673,6 +690,15 @@
 
         var html = '';
 
+        /* Sold in packs - said plainly, because the quantity box silently
+         * starting at ten is otherwise just odd. */
+        var minimum = parseInt($('#min_order_qty_' + id).val() || 1) || 1;
+        if (minimum > 1) {
+            html += '<span class="badge badge-dark p-2">' +
+                "{{ trans('lang.wholesale_only_minimum') }}".replace(':count', minimum) +
+                '</span> ';
+        }
+
         if (applied) {
             html += '<span class="badge badge-success p-2">' +
                 "{{ trans('lang.wholesale_applied_each') }}"
@@ -699,17 +725,48 @@
     }
 
     /* The stepper lives in siddhi.js and writes the new value on click, so the
-     * note is refreshed after that handler has run rather than before it. */
+     * floor is held and the note refreshed after that handler has run rather
+     * than before it. */
     $(document).on('click', '.quantity .inc, .quantity .dec', function () {
         var id = $('.add-to-cart').first().attr('data-id');
-        if (id) {
-            setTimeout(function () { updateWholesaleNote(id); }, 0);
+        if (!id) {
+            return;
         }
+
+        setTimeout(function () {
+            holdMinimumOrderQuantity(id);
+            updateWholesaleNote(id);
+        }, 0);
     });
+
+    /* A wholesale-only line cannot be stepped below its minimum. The customer
+     * is not stuck with it - they simply never had the option of buying five
+     * of something sold in tens, which is the store's decision, not ours. */
+    function holdMinimumOrderQuantity(id) {
+        var input = $('input[name="quantity_' + id + '"]');
+        if (input.length === 0) {
+            return;
+        }
+
+        var minimum = parseInt(input.attr('data-minqty') || 1) || 1;
+        if ((parseInt(input.val() || 0) || 0) < minimum) {
+            input.val(minimum);
+        }
+    }
 
     $(document).on('change keyup', '.quantity input.count-number-input', function () {
         var id = $('.add-to-cart').first().attr('data-id');
         if (id) {
+            updateWholesaleNote(id);
+        }
+    });
+
+    /* Typed rather than stepped - corrected when the customer leaves the box,
+     * not while they are still typing, or deleting a digit would fight them. */
+    $(document).on('blur', '.quantity input.count-number-input', function () {
+        var id = $('.add-to-cart').first().attr('data-id');
+        if (id) {
+            holdMinimumOrderQuantity(id);
             updateWholesaleNote(id);
         }
     });
@@ -1446,6 +1503,13 @@
                 html = html + '</div>';
             }
 
+            /* A wholesale-only product is not sold singly, so the box starts
+             * at the minimum rather than at one and rejecting the customer
+             * after they have chosen. Worked out here because the box is
+             * drawn before the wholesale block below. */
+            var sale_type = final_price.saleType || 'both';
+            var min_order_qty = minimumOrderQuantity(final_price);
+
             html = html + '<div class="quantity mt-2 mb-3">';
             html += '<div class="d-flex align-items-center product-item-box">';
             var label_qty = "{{trans('lang.quantity')}}";
@@ -1453,7 +1517,7 @@
             html += '<div class="ml-auto">';
             html += '<span class="count-number">';
             html += '<button type="button" class="btn-sm left dec btn btn-outline-secondary food_count_decrese"><i class="feather-minus"></i></button>';
-            html += '<input class="count-number-input" name="quantity_' + vendorProduct.id + '" type="text"  value="1">';
+            html += '<input class="count-number-input" name="quantity_' + vendorProduct.id + '" type="text" data-minqty="' + min_order_qty + '" value="' + min_order_qty + '">';
             html += '<button type="button" class="btn-sm right inc btn btn-outline-secondary"><i class="feather-plus"></i></button>';
             html += '</span>';
             html += '</div>';
@@ -1523,6 +1587,8 @@
             html += '<input type="hidden" id="wholesale_price_' + vendorProduct.id + '" value="' + wholesale_price + '">';
             html += '<input type="hidden" id="wholesale_min_qty_' + vendorProduct.id + '" value="' + wholesale_min_qty + '">';
             html += '<input type="hidden" id="wholesale_tiers_' + vendorProduct.id + '" value="' + wholesale_tiers + '">';
+            html += '<input type="hidden" id="sale_type_' + vendorProduct.id + '" value="' + sale_type + '">';
+            html += '<input type="hidden" id="min_order_qty_' + vendorProduct.id + '" value="' + min_order_qty + '">';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block booknow' >{{trans('lang.book_now')}}</button>";
             html = html + '<div class="description mt-2 mb-3">';
             html = html + '</div>';

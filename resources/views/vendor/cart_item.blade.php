@@ -111,6 +111,23 @@ foreach ($cart['item'] as $key => $value_vendor) {
                 <?php } ?>
                 <input type="hidden" id="extras_price_<?php echo @$key1; ?>" value="<?php echo @$value_item['extra_price']; ?>">
                 <input type="hidden" id="vegs_<?php echo @$key1; ?>" value="<?php echo @$value_item['veg']; ?>">
+                <?php
+                /* Sold in packs. Said here as well as on the product page,
+                 * because the minus button appearing to do nothing at the
+                 * floor is otherwise indistinguishable from a broken cart. */
+                $saleMinimum = 0;
+                if (($value_item['sale_type'] ?? 'both') === 'wholesale') {
+                    $saleTiers = $value_item['wholesale_tiers'] ?? [];
+                    $saleMinimum = !empty($saleTiers)
+                        ? (int) $saleTiers[0]['minQty']
+                        : (int) ($value_item['wholesale_min_qty'] ?? 0);
+                }
+                ?>
+                <?php if ($saleMinimum > 1) { ?>
+                    <div class="item-wholesale-minimum">
+                        <span class="badge badge-dark"><?php echo str_replace(':count', $saleMinimum, trans('lang.wholesale_only_minimum')); ?></span>
+                    </div>
+                <?php } ?>
                 <?php if(@$value_item['is_wholesale']){ ?>
                     <div class="item-wholesale">
                         <span class="badge badge-info">{{ trans('lang.wholesale_applied') }}</span>

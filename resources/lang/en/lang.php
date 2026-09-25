@@ -930,6 +930,7 @@ return [
     'wholesale_applied_each' => 'Wholesale price applied - :price each',
     'wholesale_add_more' => 'add :count more',
     'wholesale_details' => 'Wholesale details',
+    'wholesale_only_minimum' => 'Sold in a minimum of :count units',
     'receipt_title' => 'Receipt',
     'receipt_summary_title' => 'Order Summary',
     'receipt_download' => 'Download receipt (PDF)',
