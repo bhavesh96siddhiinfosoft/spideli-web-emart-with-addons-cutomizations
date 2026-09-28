@@ -355,6 +355,33 @@
     }
 
     async function finalCheckout() {
+    /* Arriving from a subscription the customer chose to pay for by some
+     * method other than the wallet: the modal opens with the amount already
+     * in it, so they only have to pick how to pay. Only the SHORTFALL is
+     * asked for - the plan price less whatever is already in the wallet. */
+    $(document).ready(function () {
+        var params = new URLSearchParams(window.location.search);
+        var topup = parseFloat(params.get('topup'));
+
+        if (isNaN(topup) || topup <= 0) {
+            return;
+        }
+
+        $('.wallet_amount').val(topup.toFixed(2));
+
+        var what = params.get('for');
+        if (what) {
+            $('.error_top_pass').html('<p class="text-muted small mb-0">' +
+                "{{ trans('lang.wallet_topup_for') }}".replace(':name', $('<div>').text(what).html()) +
+                '</p>');
+        }
+
+        $('#add_wallet_money').modal('show');
+
+        /* Taken out of the address bar so a refresh does not reopen it. */
+        history.replaceState(null, null, window.location.pathname);
+    });
+
         var amount = parseFloat($('.wallet_amount').val());
         
         if (amount < 0 || amount == 0 || amount == null || amount == '' || isNaN(amount)) {

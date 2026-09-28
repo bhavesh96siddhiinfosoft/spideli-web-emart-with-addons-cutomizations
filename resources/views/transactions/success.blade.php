@@ -34,6 +34,7 @@ foreach ($cityToCountry as $key => $value) {
                                             <div class="bg-white rounded text-center p-4 shadow-sm">
                                                 <h1 class="display-1 mb-4">🎉</h1>
                                                 <p class="small text-muted">{{trans('lang.wallet_amount_credit_msg')}}</p>
+                                                <p id="store_subscription_outcome" class="alert alert-info small" style="display:none;"></p>
                                                 <a href="{{route('transactions')}}" class="btn rounded btn-primary btn-lg btn-block remove_hover">
                                                     {{trans('lang.transactions')}}
                                                 </a>
@@ -95,7 +96,45 @@ foreach ($cityToCountry as $key => $value) {
                 'user_id': user_uuid
             }).then(function (result) {
                 $("#data_table_processing_order").hide();
+                finishPendingStoreSubscription();
             });
+
+            /* A top-up the customer started in order to buy a store's
+             * subscription finishes the job here, now the money has
+             * landed. Runs after the wallet row is written, so the balance
+             * the purchase re-reads is the credited one.
+             *
+             * Nothing is bought if the plan has gone, been switched off, or
+             * changed price while they were paying - the money stays in the
+             * wallet and they decide. Charging a price they never agreed to
+             * would be worse than asking them to press the button again. */
+            async function finishPendingStoreSubscription() {
+                if (typeof completePendingStoreSubscription !== 'function') {
+                    return;
+                }
+
+                var result = await completePendingStoreSubscription();
+                if (!result) {
+                    return;
+                }
+
+                var message = '';
+                if (result.status === 'bought') {
+                    message = "{{ trans('lang.store_subscription_purchased') }}";
+                } else if (result.status === 'price_changed') {
+                    message = "{{ trans('lang.store_subscription_price_changed') }}";
+                } else if (result.status === 'gone') {
+                    message = "{{ trans('lang.store_subscription_unavailable') }}";
+                } else if (result.status === 'insufficient' || result.status === 'failed') {
+                    message = "{{ trans('lang.store_subscription_not_completed') }}";
+                }
+
+                if (message === '') {
+                    return;
+                }
+
+                $('#store_subscription_outcome').text(message).show();
+            }
         <?php } ?>
     </script>
 @endif

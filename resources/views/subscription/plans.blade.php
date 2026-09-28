@@ -44,6 +44,17 @@
 
             <div id="plans_list" class="row"></div>
 
+            {{-- Plans bought from STORES, not from Spideli. A different
+                 system entirely - see partials/store_subscriptions.blade.php -
+                 but this is the screen a customer comes to for "what am I
+                 subscribed to", so it belongs here too. Hidden when there are
+                 none. --}}
+            <div id="my_store_subscriptions" class="mt-4" style="display:none;">
+                <h5 class="font-weight-bold mb-1">{{ trans('lang.my_store_subscriptions') }}</h5>
+                <p class="text-muted small mb-3">{{ trans('lang.my_store_subscriptions_intro') }}</p>
+                <div id="my_store_subscriptions_list" class="row"></div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -86,6 +97,14 @@
         await loadCustomer();
         renderCurrentSubscription();
         await renderPlans();
+
+        /* Store-sold subscriptions are a separate system; a failure to read
+         * them must not take the platform plans down with it. */
+        try {
+            await renderMyStoreSubscriptions();
+        } catch (e) {
+            console.error('store subscriptions could not be listed', e);
+        }
 
         jQuery("#overlay").hide();
     });
@@ -363,6 +382,101 @@
                 'createdAt': firebase.firestore.FieldValue.serverTimestamp()
             });
         });
+    }
+
+    /* Everything this customer holds from a store, live or lapsed. Lapsed
+     * ones are still listed rather than hidden: a customer asking "what
+     * happened to my bread delivery" needs to see that it ran out. */
+    async function renderMyStoreSubscriptions() {
+        if (cuser_id == '') {
+            return;
+        }
+
+        var snapshots = await database.collection('vendor_subscriptions')
+            .where('customerId', '==', cuser_id)
+            .get();
+
+        if (snapshots.empty) {
+            return;
+        }
+
+        var rows = [];
+
+        await Promise.all(snapshots.docs.map(async function (doc) {
+            var subscription = doc.data();
+            var plan = subscription.plan || {};
+
+            /* The store's name is looked up; everything else comes from the
+             * snapshot stored on the subscription, so a store editing or
+             * deleting a plan cannot change what the customer sees they
+             * bought. */
+            var storeName = '';
+            if (subscription.vendorID) {
+                var vendor = await database.collection('vendors').doc(subscription.vendorID).get();
+                if (vendor.exists) {
+                    storeName = vendor.data().title || '';
+                }
+            }
+
+            rows.push({ subscription: subscription, plan: plan, storeName: storeName });
+        }));
+
+        rows.sort(function (a, b) {
+            var left = storeSubscriptionExpiry(a.subscription);
+            var right = storeSubscriptionExpiry(b.subscription);
+            return (right ? right.getTime() : 0) - (left ? left.getTime() : 0);
+        });
+
+        var html = '';
+        rows.forEach(function (row) {
+            html += buildMyStoreSubscriptionCard(row);
+        });
+
+        document.getElementById('my_store_subscriptions_list').innerHTML = html;
+        $('#my_store_subscriptions').show();
+    }
+
+    function storeSubscriptionExpiry(subscription) {
+        var value = subscription.expiryDate;
+        if (!value) {
+            return null;
+        }
+        if (typeof value.toDate === 'function') {
+            return value.toDate();
+        }
+        var date = new Date(value);
+        return isNaN(date.getTime()) ? null : date;
+    }
+
+    function buildMyStoreSubscriptionCard(row) {
+        var expiry = storeSubscriptionExpiry(row.subscription);
+        var cancelled = (row.subscription.status || 'active') === 'cancelled';
+        var lapsed = expiry !== null && expiry.getTime() < Date.now();
+
+        var state;
+        if (cancelled) {
+            state = '<span class="badge badge-danger">' + "{{ trans('lang.subscription_status_cancelled') }}" + '</span>';
+        } else if (lapsed) {
+            state = '<span class="badge badge-warning">' + "{{ trans('lang.subscription_expired') }}" + '</span>';
+        } else {
+            state = '<span class="badge badge-success">' + "{{ trans('lang.subscription_status_active') }}" + '</span>';
+        }
+
+        var when = expiry === null
+            ? "{{ trans('lang.subscription_never_expires') }}"
+            : "{{ trans('lang.subscription_expires_on') }} " + expiry.toDateString();
+
+        var store = row.storeName
+            ? '<p class="text-muted small mb-1">' + $('<div>').text(row.storeName).html() + '</p>'
+            : '';
+
+        return '<div class="col-md-4 mb-3">' +
+            '<div class="p-3 rounded border h-100">' +
+            state +
+            '<h6 class="font-weight-bold mb-1 mt-2">' + $('<div>').text(row.plan.title || '').html() + '</h6>' +
+            store +
+            '<p class="small mb-0">' + when + '</p>' +
+            '</div></div>';
     }
 
     function showStatus(message, isError) {

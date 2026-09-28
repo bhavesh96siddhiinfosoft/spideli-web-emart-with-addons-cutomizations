@@ -56,6 +56,7 @@
             <div class="coupon_detail">
             </div>
         </div>
+        @include('partials.store_subscriptions')
         <div class="ecom-vendor-product-section">
             <div class="row">
                 <div class="col-md-3 vendor-detail-left">
@@ -183,7 +184,7 @@
                     }
                 });
                 var cats = [];
-                for (i = 0; i < alldata.length; i++) {
+                for (var i = 0; i < alldata.length; i++) {
                     var countProduct = await vendorProductsRef.where('categoryID', '==', alldata[i].id).get().then(function(snapshots) {
                         return snapshots.docs.length;
                     });
@@ -197,10 +198,11 @@
                     html = html + '<ul class="vandorcat-list">';
                     cats.forEach((listval) => {
                         var val = listval;
+                        /* Declared locally: this was an implicit global shared
+                         * with the product list, which renders at the same time. */
+                        var photo = placeholderImageSrc;
                         if (val.photo) {
                             photo = val.photo;
-                        } else {
-                            photo = placeholderImageSrc;
                         }
                         html = html + '<li class="category-item" data-category-id="' + val.id + '" >';
                         html = html + '<a href="javascript:void(0)"><span><img src="' + photo + '" onerror="this.onerror=null;this.src=\'' + placeholderImageSrc + '\'"></span>' + val.title + '</a>';
@@ -314,10 +316,9 @@
                     reviewsCount = val.reviewsCount;
                 }
                 html = html + '<div class="col-md-4 product-list"><div class="list-card position-relative"><div class="list-card-image">';
+                var photo = placeholderImageSrc;
                 if (val.photo) {
                     photo = val.photo;
-                } else {
-                    photo = placeholderImageSrc;
                 }
                 if (isProductDetailEnable) {
                     if (val.hasOwnProperty('nonveg')) {
@@ -373,6 +374,16 @@
     async function getVendorDetails() {
         vendorDetailsRef.get().then(async function(vendorSnapshots) {
             var vendorDetails = vendorSnapshots.docs[0].data();
+
+            /* The store's own subscriptions, if it sells any. Fails quietly:
+             * a store with no plans - which is every store today - shows
+             * nothing, and an error here must not stop the page rendering. */
+            try {
+                await loadStoreSubscriptions(vendorDetails);
+            } catch (e) {
+                console.error('store subscriptions could not be loaded', e);
+            }
+
             $("#vendor_title").append(vendorDetails.title);
             $("#vendor_address").append(vendorDetails.location);
             $("#vendor_shop_status").html("{{ trans('lang.closed') }}");
@@ -390,11 +401,11 @@
             }
             var currentHours = hour + ':' + minute;
             if (vendorDetails.hasOwnProperty('workingHours')) {
-                for (i = 0; i < vendorDetails.workingHours.length; i++) {
+                for (var i = 0; i < vendorDetails.workingHours.length; i++) {
                     var day = vendorDetails.workingHours[i]['day'];
                     if (vendorDetails.workingHours[i]['day'] == currentDay) {
                         if (vendorDetails.workingHours[i]['timeslot'].length != 0) {
-                            for (j = 0; j < vendorDetails.workingHours[i]['timeslot'].length; j++) {
+                            for (var j = 0; j < vendorDetails.workingHours[i]['timeslot'].length; j++) {
                                 var timeslot = vendorDetails.workingHours[i]['timeslot'][j];
                                 var TimeslotHourVar = {
                                     'from': timeslot[`from`],
@@ -440,10 +451,10 @@
             var currentTime = currentdate.getHours() + ":" + currentdate.getMinutes();
             if (enableSpecialOffer) {
                 if (specialOfferVendor.length != 0) {
-                    for (i = 0; i < specialOfferVendor.length; i++) {
+                    for (var i = 0; i < specialOfferVendor.length; i++) {
                         if (specialOfferVendor[i]['day'] == currentDay) {
                             if (specialOfferVendor[i]['timeslot'].length > 0) {
-                                for (j = 0; j < specialOfferVendor[i]['timeslot'].length; j++) {
+                                for (var j = 0; j < specialOfferVendor[i]['timeslot'].length; j++) {
                                     if (currentTime >= specialOfferVendor[i]['timeslot'][j]['from'] && currentTime <= specialOfferVendor[i]['timeslot'][j]['to']) {
                                         if (specialOfferVendor[i]['timeslot'][j]['discount_type'] == 'delivery') {
                                             specialOfferForHour = [];

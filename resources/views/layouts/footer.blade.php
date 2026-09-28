@@ -1994,6 +1994,15 @@
 
         jQuery("#data-table_processing").show();
 
+        /* Drops any payment method the customer's region does not carry, on
+         * every screen that offers them. Never blocks the page: a failure
+         * leaves the methods as they were. */
+        try {
+            await enforcePaymentMethodRegions();
+        } catch (e) {
+            console.error('payment method regions could not be applied', e);
+        }
+
          if(getCookie('section_id')){
             let sectionRef = await database.collection('sections').doc(getCookie('section_id')).get();
             var adminCommissionSettings = sectionRef.data();
@@ -2657,6 +2666,334 @@
     }
     //end - Get product price with admin commission globally
     // Process each vendor's data and calculate the price with admin commission
+    /* ------------------------------------------------------------------
+     * Payment methods by region.
+     *
+     * The admin panel lets each gateway name the regions it is offered in
+     * (Settings -> Payment Methods -> Available in Regions). THE WEBSITE WAS
+     * IGNORING IT ENTIRELY - every screen showed a gateway on `isEnabled`
+     * alone, so the setting had no effect on a customer.
+     *
+     * Nine screens offer gateways - checkout, wallet top-up, gift cards,
+     * parcel, two rental screens, on-demand, extra charge and service charge -
+     * with 109 places between them that reveal one. Rather than edit every
+     * one, the rule is applied ONCE here: an option the region excludes is
+     * removed from the page.
+     *
+     * Removal is why this is safe whatever the order. Each screen reveals its
+     * gateways inside its own Firestore callback, so there is no reliable
+     * moment "after" them; but `$('#x_box').show()` on an element that is no
+     * longer in the document quietly does nothing. Removing early and removing
+     * late both end with the option gone.
+     *
+     * FAILS OPEN. A settings document that cannot be read leaves the method
+     * showing: a method that turns out not to apply is a failed payment, while
+     * hiding them all is a customer who cannot pay at all.
+     * ------------------------------------------------------------------ */
+    var PAYMENT_METHOD_SETTINGS = {
+        'cod_box': 'CODSettings',
+        'wallet_box': 'walletSettings',
+        'razorpay_box': 'razorpaySettings',
+        'stripe_box': 'stripeSettings',
+        'paypal_box': 'paypalSettings',
+        'payfast_box': 'payFastSettings',
+        'paystack_box': 'payStack',
+        'flutterWave_box': 'flutterWave',
+        'mercadopago_box': 'MercadoPago',
+        'xendit_box': 'xendit_settings',
+        'midtrans_box': 'midtrans_settings',
+        'orangepay_box': 'orange_money_settings'
+    };
+
+    async function enforcePaymentMethodRegions() {
+        var ids = Object.keys(PAYMENT_METHOD_SETTINGS).filter(function (id) {
+            return document.getElementById(id) !== null;
+        });
+
+        /* Not a screen that offers payment methods. */
+        if (ids.length === 0) {
+            return;
+        }
+
+        var regionId = await getActiveRegionId();
+
+        /* An unresolved region shows everything, the same way an unresolved
+         * region shows every store rather than none. */
+        if (!regionId) {
+            return;
+        }
+
+        await Promise.all(ids.map(async function (id) {
+            try {
+                var doc = await database.collection('settings')
+                    .doc(PAYMENT_METHOD_SETTINGS[id]).get();
+
+                if (!doc.exists) {
+                    return;
+                }
+
+                var regionIds = doc.data().regionIds;
+
+                /* Empty or absent means offered everywhere - the same rule
+                 * sections and subscription plans use. */
+                if (!Array.isArray(regionIds) || regionIds.length === 0) {
+                    return;
+                }
+
+                if (regionIds.indexOf(regionId) === -1) {
+                    $('#' + id).remove();
+                }
+            } catch (e) {
+                console.error('payment method regions could not be read for ' + id, e);
+            }
+        }));
+    }
+
+    /* ------------------------------------------------------------------
+     * Buying a store's subscription, and paying for it by any method.
+     *
+     * The wallet buys one outright. Any other method goes through the wallet
+     * TOP-UP that already exists - twelve gateways that are already built,
+     * already tested and already region-filtered - and the subscription
+     * completes by itself when the customer comes back.
+     *
+     * The alternative was an eighth copy of those twelve integrations, one
+     * that could not be tested without live keys for every gateway. This way
+     * the customer still picks any method their region carries, and the money
+     * has somewhere safe to sit if anything goes wrong on the way back: it is
+     * in their wallet, not lost.
+     *
+     * Lives here rather than in the store page because two screens need it -
+     * the store page, and the top-up success page that finishes the job.
+     * ------------------------------------------------------------------ */
+    var STORE_SUBSCRIPTION_INTENT = 'pendingStoreSubscription';
+
+    function saveStoreSubscriptionIntent(plan, returnUrl) {
+        try {
+            localStorage.setItem(STORE_SUBSCRIPTION_INTENT, JSON.stringify({
+                planId: plan.id,
+                vendorID: plan.vendorID,
+                /* Kept only to notice a price change on the way back. The
+                 * charge itself is always taken from the plan as it reads at
+                 * that moment, never from this. */
+                price: parseFloat(plan.price || 0) || 0,
+                returnUrl: returnUrl || '',
+                savedAt: Date.now()
+            }));
+        } catch (e) {
+            console.error('subscription intent could not be saved', e);
+        }
+    }
+
+    function readStoreSubscriptionIntent() {
+        try {
+            var raw = localStorage.getItem(STORE_SUBSCRIPTION_INTENT);
+            if (!raw) {
+                return null;
+            }
+
+            var intent = JSON.parse(raw);
+
+            /* An intent older than an hour is stale - a customer who wandered
+             * off mid-payment should not be charged when they return
+             * tomorrow. */
+            if (!intent || !intent.planId || (Date.now() - (intent.savedAt || 0)) > 3600000) {
+                clearStoreSubscriptionIntent();
+                return null;
+            }
+
+            return intent;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearStoreSubscriptionIntent() {
+        try {
+            localStorage.removeItem(STORE_SUBSCRIPTION_INTENT);
+        } catch (e) {}
+    }
+
+    /* Document 1: "The application's commission must also be deducted from
+     * this service." The customer pays the store's price and the platform's
+     * cut comes OUT of it - unlike a product, where the commission is added on
+     * top of the vendor's price.
+     *
+     * The store's own rate when it has one, otherwise the section's, and
+     * nothing at all when commission is switched off. */
+    async function storePlanCommission(vendor, price) {
+        var settings = localStorage.getItem('adminCommissionSettings');
+        if (!settings) {
+            return 0;
+        }
+
+        try {
+            settings = JSON.parse(settings);
+        } catch (e) {
+            return 0;
+        }
+
+        if (!settings || settings.enable !== true) {
+            return 0;
+        }
+
+        var rate = (vendor && vendor.adminCommission) ? vendor.adminCommission : settings;
+        var amount = parseFloat(rate.commission) || 0;
+        var commission = (rate.type === 'percentage') ? (price * amount / 100) : amount;
+
+        /* Never more than the price itself - a fixed cut larger than a cheap
+         * plan would otherwise hand the store a negative earning. */
+        return Math.min(Math.max(commission, 0), price);
+    }
+
+    /* One Firestore transaction for the whole purchase. The balance is re-read
+     * inside it and the purchase rejected if it moved, so a double click or a
+     * second tab cannot pay twice.
+     *
+     * Four writes, all or none:
+     *   users/{customerId}            the debit, and NOTHING else
+     *   wallet/{new}                  the customer's own ledger line
+     *   vendor_subscriptions/{new}    the Subscribers tab in both panels
+     *   vendor_subscription_payments  the Payments tab in both panels
+     *
+     * The customer document gets the debit and no more. subscriptionPlanId and
+     * its neighbours belong to the PLATFORM's own plan; a store plan must
+     * never overwrite them, or a bakery's bread plan would silently replace
+     * someone's order-history plan. */
+    async function purchaseStorePlanFromWallet(plan, vendor) {
+        var price = parseFloat(plan.price || 0) || 0;
+        var walletId = database.collection('tmp').doc().id;
+        var subscriptionId = database.collection('tmp').doc().id;
+        var paymentId = database.collection('tmp').doc().id;
+        var commission = await storePlanCommission(vendor, price);
+
+        await database.runTransaction(async function (tx) {
+            var userRef = database.collection('users').doc(cuser_id);
+            var snapshot = await tx.get(userRef);
+            var user = snapshot.exists ? snapshot.data() : {};
+
+            var balance = parseFloat(user.wallet_amount || 0) || 0;
+            if (balance < price) {
+                throw new Error('INSUFFICIENT');
+            }
+
+            tx.update(userRef, { 'wallet_amount': balance - price });
+
+            var expiry = null;
+            if (String(plan.expiryDay) !== '-1') {
+                var expiryDate = new Date();
+                expiryDate.setDate(expiryDate.getDate() + (parseInt(plan.expiryDay, 10) || 0));
+                expiry = firebase.firestore.Timestamp.fromDate(expiryDate);
+            }
+
+            tx.set(database.collection('wallet').doc(walletId), {
+                'id': walletId,
+                'amount': price,
+                'date': firebase.firestore.FieldValue.serverTimestamp(),
+                'isTopUp': false,
+                'note': 'Store subscription purchase',
+                'payment_method': 'Wallet',
+                'payment_status': 'success',
+                'transactionUser': 'user',
+                'user_id': cuser_id
+            });
+
+            tx.set(database.collection('vendor_subscriptions').doc(subscriptionId), {
+                'id': subscriptionId,
+                'planId': plan.id,
+                'vendorID': plan.vendorID,
+                'customerId': cuser_id,
+                /* A snapshot, not a reference: a store renaming or deleting a
+                 * plan must not change what an existing subscriber is shown.
+                 * The store panel reads subscription.plan.title for exactly
+                 * this reason. */
+                'plan': plan,
+                'startDate': firebase.firestore.Timestamp.fromDate(new Date()),
+                'expiryDate': expiry,
+                'status': 'active',
+                'createdAt': firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            tx.set(database.collection('vendor_subscription_payments').doc(paymentId), {
+                'id': paymentId,
+                'planId': plan.id,
+                'vendorID': plan.vendorID,
+                'customerId': cuser_id,
+                'amount': price,
+                /* Recorded on the payment, never re-derived: the platform
+                 * changing its cut must not rewrite what an older payment
+                 * earned. */
+                'adminCommission': commission,
+                'vendorEarning': price - commission,
+                'payment_method': 'Wallet',
+                'createdAt': firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+    }
+
+    /* Finishes a purchase the customer started before topping up.
+     *
+     * The plan is re-read rather than taken from the saved intent, so the
+     * charge is always the price as it stands now. If it has changed since
+     * they set out, NOTHING is bought - the money is sitting in their wallet
+     * and they can decide for themselves. Charging a price they never agreed
+     * to is worse than making them press the button again.
+     *
+     * Returns a short result the calling screen can report. */
+    async function completePendingStoreSubscription() {
+        var intent = readStoreSubscriptionIntent();
+
+        if (!intent || cuser_id == '') {
+            return null;
+        }
+
+        try {
+            var planDoc = await database.collection('vendor_subscription_plans')
+                .doc(intent.planId).get();
+
+            if (!planDoc.exists) {
+                clearStoreSubscriptionIntent();
+                return { status: 'gone' };
+            }
+
+            var plan = planDoc.data();
+            plan.id = plan.id || planDoc.id;
+
+            if (plan.isEnable !== true) {
+                clearStoreSubscriptionIntent();
+                return { status: 'gone' };
+            }
+
+            var price = parseFloat(plan.price || 0) || 0;
+            if (price !== intent.price) {
+                clearStoreSubscriptionIntent();
+                return { status: 'price_changed', plan: plan };
+            }
+
+            var vendor = null;
+            var vendorDoc = await database.collection('vendors').doc(plan.vendorID).get();
+            if (vendorDoc.exists) {
+                vendor = vendorDoc.data();
+            }
+
+            await purchaseStorePlanFromWallet(plan, vendor);
+            clearStoreSubscriptionIntent();
+
+            return { status: 'bought', plan: plan };
+        } catch (err) {
+            /* Left in place on a failure that is not about money, so the
+             * customer can try again. An insufficient balance means the
+             * top-up did not cover it, which is not going to fix itself. */
+            if (err && err.message === 'INSUFFICIENT') {
+                clearStoreSubscriptionIntent();
+                return { status: 'insufficient', plan: null };
+            }
+
+            console.error('pending subscription could not be completed', err);
+            return { status: 'failed' };
+        }
+    }
+
     async function fetchVendorPriceData() {
         let priceData = {}; // To store price data for each vendor
         let adminCommissionSettings = localStorage.getItem('adminCommissionSettings');
