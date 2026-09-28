@@ -91,12 +91,14 @@
 </div>
 <!-- Store Select Model -->
 <div class="modal fade" id="select_store_model" tabindex="-1" role="dialog" aria-hidden="true">
-    {{-- modal-dialog-scrollable keeps the window the size it always was and
-         scrolls the list inside it. Without it the dialog grew with the
-         content, and it grew a lot once the services were grouped: five
-         headings on top of twelve tiles. Bootstrap 4.5 ships the class, so
-         this is the theme using what it already has rather than new CSS. --}}
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable notification-main" role="document">
+    {{-- Left CENTRED, as it always was. Bootstrap's modal-dialog-scrollable
+         was tried here and is wrong alongside modal-dialog-centered: the two
+         together force the dialog to exactly calc(100% - 1rem), so it fills
+         the screen top to bottom and looks stuck to the bottom edge.
+
+         The list is capped and scrolled in the body instead - see the style
+         below - which keeps the window the size it has always been. --}}
+    <div class="modal-dialog modal-dialog-centered notification-main" role="document">
         <div class="modal-content">
             <div class="modal-header justify-content-center">
                 <h5>{{ trans('lang.select_sections') }}</h5>
@@ -107,6 +109,16 @@
             <div class="modal-body">
                 <div class="section_list row mt-3" id="section_lists"></div>
             </div>
+            <style>
+                /* Grouping added five headings on top of twelve tiles, so the
+                   list outgrew the window. The BODY scrolls; the heading and
+                   the close button stay put. 65vh leaves room for the header
+                   and a margin at both ends on any screen. */
+                #select_store_model .modal-body {
+                    max-height: 65vh;
+                    overflow-y: auto;
+                }
+            </style>
         </div>
     </div>
 </div>
