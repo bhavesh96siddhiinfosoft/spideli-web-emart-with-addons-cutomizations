@@ -703,6 +703,24 @@
             '<span class="section-name mt-2 d-block">' + datas.name + '</span></div></div>';
     }
 
+    /* Group names arrive HTML-ESCAPED. The admin panel seeds them through
+     * Blade's {{ }}, which escapes, so Firestore literally holds
+     * "Online Shopping &amp; Restaurant". Escaping that again would show the
+     * customer the &amp; itself.
+     *
+     * Decoding first and then escaping handles both shapes: a name stored
+     * escaped comes back to a plain ampersand, a name typed by the client
+     * with a real < is still made safe before it goes near the page.
+     *
+     * Setting innerHTML on a detached textarea decodes entities and executes
+     * nothing - a textarea has no markup of its own. */
+    function escapeGroupName(value) {
+        var decoder = document.createElement('textarea');
+        decoder.innerHTML = String(value || '');
+
+        return $('<div>').text(decoder.value).html();
+    }
+
     /* Draws the section list into #section_lists, grouped.
      *
      * UNGROUPED SERVICES COME FIRST, WITH NO HEADING. Every service is
@@ -767,7 +785,7 @@
 
             html += '<div class="col-12 section-group-heading mb-2">' +
                 '<h6 class="font-weight-bold mb-0">' +
-                $('<div>').text(group.name || '').html() +
+                escapeGroupName(group.name) +
                 '</h6></div>';
 
             members.forEach(function (datas) {
