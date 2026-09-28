@@ -34,11 +34,36 @@ class SendEmailController extends Controller
         return view('send_email');
     }
 
+    /**
+     * Sends one of the admin panel's email templates.
+     *
+     * `to_admin` sends it to the address in MAIL_TO_ADDRESS instead of to a
+     * recipient list. The address stays SERVER-SIDE: putting it in the page
+     * for the browser to post back would publish it in the page source and
+     * let anyone address mail to it.
+     *
+     * With no admin address configured, the admin copy is skipped rather than
+     * failing - the customer's own email, and whatever the customer was doing,
+     * must not depend on that setting being filled in.
+     */
     function sendMail(Request $request)
     {
         $data = $request->all();
         $subject = $data['subject'];
         $message = base64_decode($data['message']);
+
+        if (!empty($data['to_admin'])) {
+            $adminAddress = env('MAIL_TO_ADDRESS');
+
+            if (empty($adminAddress)) {
+                return "no admin address configured";
+            }
+
+            Mail::to($adminAddress)->send(new SetEmailData($subject, $message));
+
+            return "email sent successfully!";
+        }
+
         $recipients = $data['recipients'];
         Mail::to($recipients)->send(new SetEmailData($subject, $message));
         return "email sent successfully!";

@@ -332,6 +332,8 @@
     async function purchasePlan(plan, price) {
         var walletId = database.collection('tmp').doc().id;
         var historyId = database.collection('tmp').doc().id;
+        /* Kept out here so the confirmation email can quote it. */
+        var planExpiryDate = null;
 
         await database.runTransaction(async function (tx) {
             var userRef = database.collection('users').doc(cuser_id);
@@ -350,6 +352,7 @@
                 var expiryDate = new Date();
                 expiryDate.setDate(expiryDate.getDate() + parseInt(plan.expiryDay, 10));
                 expiry = firebase.firestore.Timestamp.fromDate(expiryDate);
+                planExpiryDate = expiryDate;
             }
 
             tx.update(userRef, {
@@ -381,6 +384,22 @@
                 'payment_type': 'Wallet',
                 'createdAt': firebase.firestore.FieldValue.serverTimestamp()
             });
+        });
+
+        /* After the transaction, never inside it: the money is committed and
+         * an email that fails must not look like a failed purchase. */
+        await sendSubscriptionMail({
+            customerName: currentUser
+                ? ((currentUser.firstName || '') + ' ' + (currentUser.lastName || '')).trim()
+                : '',
+            customerEmail: currentUser ? (currentUser.email || '') : '',
+            planName: plan.name || '',
+            planType: "{{ trans('lang.subscription_plans_title') }}",
+            storeName: '',
+            price: formatCurrency(price, regionCurrency),
+            paymentMethod: 'Wallet',
+            expiryDate: planExpiryDate ? planExpiryDate.toDateString() : '',
+            date: new Date().toDateString()
         });
     }
 

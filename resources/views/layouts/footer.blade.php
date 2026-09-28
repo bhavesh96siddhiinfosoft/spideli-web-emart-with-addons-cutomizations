@@ -1633,6 +1633,127 @@
         return taxHtml;
     }
 
+    /* ------------------------------------------------------------------
+     * Subscription purchase emails.
+     *
+     * Two templates, both edited by the client in the admin panel's Email
+     * Templates screen rather than written into this code:
+     *
+     *   subscription_purchased        -> the customer
+     *   subscription_purchased_admin  -> the admin
+     *
+     * Covers BOTH kinds of subscription - the platform's own order-history
+     * plan and a plan a store sells - because a customer buying either has
+     * paid for something and expects to be told.
+     *
+     * NOTHING HERE CAN BREAK A PURCHASE. Every path is wrapped, and a missing
+     * template, a missing address or a failed send is logged and dropped. The
+     * money has already moved by the time this runs; an email that does not
+     * arrive must never make it look as though the purchase failed.
+     * ------------------------------------------------------------------ */
+    async function sendSubscriptionMail(details) {
+        try {
+            await sendOneSubscriptionMail('subscription_purchased', details, false);
+            await sendOneSubscriptionMail('subscription_purchased_admin', details, true);
+        } catch (err) {
+            console.error('subscription email could not be sent', err);
+        }
+    }
+
+    async function sendOneSubscriptionMail(type, details, toAdmin) {
+        try {
+            var snapshot = await database.collection('email_templates')
+                .where('type', '==', type).limit(1).get();
+
+            /* No template means no email - not a hardcoded English one, which
+             * would go out in the wrong language and ignore the client's
+             * wording. */
+            if (snapshot.empty) {
+                return;
+            }
+
+            var template = snapshot.docs[0].data();
+            var subject = fillSubscriptionMailTokens(template.subject || '', details);
+            var message = fillSubscriptionMailTokens(template.message || '', details);
+
+            if (toAdmin) {
+                /* The admin address lives in the server's configuration. The
+                 * browser asks for it to be used; it never learns what it is. */
+                await sendEmailToAdmin("{{ url('send-email') }}", subject, message);
+                return;
+            }
+
+            if (!details.customerEmail) {
+                return;
+            }
+
+            await sendEmail("{{ url('send-email') }}", subject, message, [details.customerEmail]);
+        } catch (err) {
+            console.error('subscription email (' + type + ') could not be sent', err);
+        }
+    }
+
+    /* The same placeholders the other templates use, in the same {token}
+     * style. A token the client has not used is simply absent; a token with
+     * nothing behind it is emptied rather than left showing as {price}. */
+    function fillSubscriptionMailTokens(text, details) {
+        return String(text)
+            .replace(/{username}/g, details.customerName || '')
+            .replace(/{customeremail}/g, details.customerEmail || '')
+            .replace(/{planname}/g, details.planName || '')
+            .replace(/{plantype}/g, details.planType || '')
+            .replace(/{storename}/g, details.storeName || '')
+            .replace(/{price}/g, details.price || '')
+            .replace(/{paymentmethod}/g, details.paymentMethod || '')
+            .replace(/{expirydate}/g, details.expiryDate || '')
+            .replace(/{date}/g, details.date || '');
+    }
+
+    async function sendEmailToAdmin(url, subject, message) {
+        var checkFlag = false;
+        await $.ajax({
+            type: 'POST',
+            data: {
+                subject: subject,
+                message: btoa(message),
+                to_admin: 1
+            },
+            url: url,
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function () { checkFlag = true; },
+            error: function () { checkFlag = true; }
+        });
+        return checkFlag;
+    }
+
+    /* Gathers what the templates can show, for a plan a STORE sold. */
+    async function storeSubscriptionMailDetails(plan, vendor, expiry) {
+        var customer = null;
+
+        try {
+            var snapshot = await database.collection('users').doc(cuser_id).get();
+            customer = snapshot.exists ? snapshot.data() : null;
+        } catch (e) {}
+
+        var currency = await getCurrencyForStore(vendor || { regionId: plan.regionId });
+
+        return {
+            customerName: customer
+                ? ((customer.firstName || '') + ' ' + (customer.lastName || '')).trim()
+                : '',
+            customerEmail: customer ? (customer.email || '') : '',
+            planName: plan.title || '',
+            planType: "{{ trans('lang.store_subscriptions_title') }}",
+            storeName: (vendor && vendor.title) ? vendor.title : '',
+            price: formatCurrency(parseFloat(plan.price || 0) || 0, currency),
+            paymentMethod: 'Wallet',
+            expiryDate: expiry ? expiry.toDateString() : '',
+            date: new Date().toDateString()
+        };
+    }
+
     async function sendEmail(url, subject, message, recipients) {
         var checkFlag = false;
         await $.ajax({
@@ -2929,6 +3050,17 @@
                 'createdAt': firebase.firestore.FieldValue.serverTimestamp()
             });
         });
+
+        /* After the transaction, never inside it: the money is committed and
+         * an email that fails must not roll anything back or look like a
+         * failed purchase. */
+        var expiryDate = null;
+        if (String(plan.expiryDay) !== '-1') {
+            expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + (parseInt(plan.expiryDay, 10) || 0));
+        }
+
+        await sendSubscriptionMail(await storeSubscriptionMailDetails(plan, vendor, expiryDate));
     }
 
     /* Finishes a purchase the customer started before topping up.
