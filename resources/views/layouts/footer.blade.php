@@ -617,6 +617,167 @@
         }
     }
 
+    /* ------------------------------------------------------------------
+     * Services grouped on the section list.
+     *
+     * Document 1 page 9 asks for the services to be presented in groups -
+     * "Online shopping & Restaurant", "Transport & Delivery", "Finance",
+     * "On demand services", "Others". The admin panel has offered this since
+     * 21 September: a `service_groups` collection the client manages, and a
+     * `serviceGroup` on each section. THIS PANEL WAS READING NEITHER, so the
+     * grouping the client set up was invisible to customers.
+     *
+     * The list was built twice in this file, once for the modal that opens by
+     * itself and once for the one the customer opens. Both now go through
+     * renderSectionList().
+     *
+     * THE GROUPS ARE DATA, NOT A FIXED LIST. The five on page 9 are only what
+     * the admin panel seeds; the client can rename, reorder, add and unpublish
+     * them, so nothing here may hardcode the five.
+     * ------------------------------------------------------------------ */
+    var serviceGroupsCache = null;
+
+    async function loadServiceGroups() {
+        if (serviceGroupsCache !== null) {
+            return serviceGroupsCache;
+        }
+
+        serviceGroupsCache = [];
+
+        try {
+            var snapshots = await database.collection('service_groups').get();
+
+            snapshots.docs.forEach(function (doc) {
+                var group = doc.data();
+                group.id = group.id || doc.id;
+
+                /* publish false hides a group. Absent counts as published, so
+                 * a group saved before the field existed still shows. */
+                if (group.publish === false) {
+                    return;
+                }
+
+                serviceGroupsCache.push(group);
+            });
+
+            serviceGroupsCache.sort(function (a, b) {
+                return (parseInt(a.order) || 0) - (parseInt(b.order) || 0);
+            });
+        } catch (err) {
+            /* No groups means the flat list this panel has always shown -
+             * never an empty screen. */
+            console.error('service groups could not be read', err);
+            serviceGroupsCache = [];
+        }
+
+        return serviceGroupsCache;
+    }
+
+    /* One card. Both lists drew this separately, with one difference: the
+     * modal that opens by itself wrote data-dine_in="false" for an On Demand
+     * section while the other wrote whatever the section carried, usually
+     * undefined. The click handler treats anything but "true" as false, so the
+     * two behaved identically; this keeps the explicit one. */
+    function sectionCardHtml(datas, activeSectionId) {
+        var image = (datas.sectionImage != '' && datas.sectionImage != undefined)
+            ? datas.sectionImage
+            : placeholderImage;
+
+        var dineIn = (datas.serviceType == "On Demand Service")
+            ? 'false'
+            : datas.dine_in_active;
+
+        var active = (activeSectionId && activeSectionId == datas.id)
+            ? ' section-selected'
+            : '';
+
+        return '<div class="section-list-inner col-md-3 mb-4 select_section' + active + '"' +
+            ' data-color="' + datas.color + '"' +
+            ' service_type="' + datas.serviceType + '"' +
+            ' data-name="' + datas.name + '"' +
+            ' data-dine_in="' + dineIn + '"' +
+            ' data-id="' + datas.id + '">' +
+            '<div class="section-block bg-white rounded d-block py-3 px-2 text-center shadow-lg">' +
+            '<span class="section-img"><img alt="#" src="' + image +
+            '" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="img-fluid item-img w-100"></span>' +
+            '<span class="section-name mt-2 d-block">' + datas.name + '</span></div></div>';
+    }
+
+    /* Draws the section list into #section_lists, grouped.
+     *
+     * UNGROUPED SERVICES COME FIRST, WITH NO HEADING. Every service is
+     * ungrouped until an admin sets it, so on the day this ships the screen
+     * looks exactly as it does now and the groups appear underneath as the
+     * client fills them in. Putting them under "Others" instead would file the
+     * whole list under a heading that means the opposite.
+     *
+     * AN EMPTY GROUP IS NOT DRAWN. A heading with nothing beneath it reads as
+     * a fault.
+     *
+     * A section pointing at a group that has been deleted or unpublished is
+     * treated as ungrouped rather than dropped - never hide a service because
+     * of a setting on something else.
+     */
+    async function renderSectionList(activeSectionId) {
+        var container = $("#section_lists");
+
+        if (container.length === 0 || container.html() != '') {
+            return;
+        }
+
+        var snapshots = await database.collection('sections')
+            .where('isActive', '==', true).orderBy('order').get();
+
+        var groups = await loadServiceGroups();
+        var known = {};
+        groups.forEach(function (group) { known[String(group.id)] = []; });
+
+        var ungrouped = [];
+
+        snapshots.docs.forEach(function (doc) {
+            var datas = doc.data();
+
+            /* Region first, grouping second - a service not offered where the
+             * customer is must not appear under any heading. */
+            if (!sectionMatchesRegion(datas)) {
+                return;
+            }
+
+            var groupId = String(datas.serviceGroup || '');
+
+            if (groupId !== '' && known[groupId]) {
+                known[groupId].push(datas);
+            } else {
+                ungrouped.push(datas);
+            }
+        });
+
+        var html = '';
+
+        ungrouped.forEach(function (datas) {
+            html += sectionCardHtml(datas, activeSectionId);
+        });
+
+        groups.forEach(function (group) {
+            var members = known[String(group.id)];
+
+            if (!members || members.length === 0) {
+                return;
+            }
+
+            html += '<div class="col-12 section-group-heading mb-2">' +
+                '<h6 class="font-weight-bold mb-0">' +
+                $('<div>').text(group.name || '').html() +
+                '</h6></div>';
+
+            members.forEach(function (datas) {
+                html += sectionCardHtml(datas, activeSectionId);
+            });
+        });
+
+        container.append(html);
+    }
+
     if (typeof is_layer != "undefined") {
         $(".select-sec-btn").hide();
     }
@@ -635,37 +796,7 @@
                 $('#select_store_model_call')[0].click();
             }
             <?php } ?>
-            if ($("#section_lists").html() == '') {
-                var sectionsRef = database.collection('sections').where('isActive', '==', true).orderBy('order');
-                sectionsRef.get().then(async function(snapshots) {
-                    var sections = [];
-                    snapshots.docs.forEach((section) => {
-                        var datas = section.data();
-                        if (!sectionMatchesRegion(datas)) {
-                            return;
-                        }
-                        if (datas.sectionImage != '' && datas.sectionImage != undefined) {
-                            section_image = datas.sectionImage;
-                        } else {
-                            section_image = placeholderImage;
-                        }
-                        var queryParams = new URLSearchParams(window.location.search);
-                        if (datas.serviceType == "On Demand Service") {
-                            html = '<div class="section-list-inner col-md-3 mb-4 select_section" data-color="' + datas.color + '" service_type="' + datas.serviceType + '" data-name="' + datas.name + '" data-dine_in="false" data-id="' + datas.id + '">' +
-                                '<div class="section-block bg-white rounded d-block py-3 px-2 text-center shadow-lg">' +
-                                '<span class="section-img"><img alt="#" src="' + section_image + '" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="img-fluid item-img w-100"></span>' +
-                                '<span class="section-name mt-2 d-block">' + datas.name + '</span></div></div>';
-                        } else {
-                            html = '<div class="section-list-inner col-md-3 mb-4 select_section" data-color="' + datas.color + '" service_type="' + datas.serviceType + '" data-name="' + datas.name + '" data-dine_in="' + datas.dine_in_active + '" data-id="' + datas.id + '">' +
-                                '<div class="section-block bg-white rounded d-block py-3 px-2 text-center shadow-lg">' +
-                                '<span class="section-img"><img alt="#" src="' + section_image + '" onerror="this.onerror=null;this.src=\'' + placeholderImage + '\'" class="img-fluid item-img w-100"></span>' +
-                                '<span class="section-name mt-2 d-block">' + datas.name + '</span></div></div>';
-                        }
-                        $("#section_lists").append(html);
-                        sections.push(datas);
-                    });
-                });
-            }
+            renderSectionList('');
         }
     }
 
@@ -674,38 +805,7 @@
     }
     
     $('#select_store_model_call').bind('click', function() {
-        if ($("#section_lists").html() == '') {
-            var sectionsRef = database.collection('sections').where('isActive', '==', true).orderBy('order');
-            var active_section_id = "<?php echo @$_COOKIE['section_id']; ?>";
-            sectionsRef.get().then(async function(snapshots) {
-                var sections = [];
-                snapshots.docs.forEach((section) => {
-                    var datas = section.data();
-                    if (!sectionMatchesRegion(datas)) {
-                        return;
-                    }
-                    if (datas.sectionImage != '' && datas.sectionImage != undefined) {
-                        section_image = datas.sectionImage;
-                    } else {
-                        section_image = placeholderImage;
-                    }
-                    var active_section = '';
-                    if (active_section_id != undefined && active_section_id == datas.id) {
-                        active_section = 'section-selected';
-                    }
-                    var queryParams = new URLSearchParams(window.location.search);
-                    if (datas.serviceType == "On Demand Service") {
-                        html = '<div class="section-list-inner col-md-3 mb-4 select_section ' + active_section + '" service_type="' + datas.serviceType + '"data-color="' + datas.color + '" data-name="' + datas.name + '" data-id="' + datas.id + '" data-dine_in="' + datas.dine_in_active + '"><div class="section-block bg-white rounded d-block py-3 px-2 text-center shadow-lg"><span class="section-img"><img alt="#" src="' + section_image +
-                            '" class="img-fluid item-img w-100"></span><span class="section-name mt-2 d-block">' + datas.name + '</span></div></div>';
-                    } else {
-                        html = '<div class="section-list-inner col-md-3 mb-4 select_section ' + active_section + '" service_type="' + datas.serviceType + '"data-color="' + datas.color + '" data-name="' + datas.name + '" data-id="' + datas.id + '" data-dine_in="' + datas.dine_in_active + '"><div class="section-block bg-white rounded d-block py-3 px-2 text-center shadow-lg"><span class="section-img"><img alt="#" src="' + section_image +
-                            '" class="img-fluid item-img w-100"></span><span class="section-name mt-2 d-block">' + datas.name + '</span></div></div>';
-                    }
-                    $("#section_lists").append(html);
-                    sections.push(datas);
-                });
-            });
-        }
+        renderSectionList("<?php echo @$_COOKIE['section_id']; ?>");
     });
     
   
