@@ -3534,7 +3534,11 @@
      * both sides have to agree or the same customer sees a different history
      * in the app and on the web. The admin panel writes the document with
      * these same defaults the first time that screen is opened. */
-    var ORDER_HISTORY_DEFAULT_LIMIT = 5;
+    /* What applies when settings/OrderHistory is missing: the limit is ON,
+     * at the number the client settled on (8, 28 Sep 2026) - not off. An
+     * absent settings document must not hand every customer a free full
+     * history. */
+    var ORDER_HISTORY_DEFAULT_LIMIT = 8;
 
     async function freeOrderHistoryLimit() {
         var settings = await loadOrderHistorySettings();

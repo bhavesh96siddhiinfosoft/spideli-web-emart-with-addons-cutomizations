@@ -915,7 +915,7 @@ return [
     'subscription_days' => 'days',
     'subscription_none_available' => 'There are no plans available in your area at the moment.',
     'subscription_wallet_balance' => 'Wallet balance',
-    'order_history_limited' => 'You are seeing your :count most recent orders.',
+    'order_history_limited' => 'You are seeing your :count most recent orders. Subscribe to see your older orders.',
     'order_history_see_all' => 'See your complete history',
     'order_history_period' => 'Show orders from',
     'order_history_period_all' => 'All time',

@@ -451,8 +451,17 @@
         if (!orderSnapshots) {
             return;
         }
-        /* Each tab caps itself - see limitOrderHistory below. */
         var orders = orderSnapshots;
+
+        /* The free allowance is worked out ONCE for the whole screen, not per
+         * tab - client decision, 28 Sep, replacing the per-tab cap of 24 Sep.
+         * A customer without a subscription sees their N most recent orders of
+         * any kind; everything older is hidden whichever tab it would sit in.
+         *
+         * A consequence the client accepted knowingly: a tab can be empty
+         * while orders of that kind exist, because the allowance was used up
+         * by newer orders in other tabs. */
+        await applyFreeOrderAllowance();
 
         completed_orders = document.getElementById('completed_orders');
         pending_orders = document.getElementById('pending_orders');
@@ -485,26 +494,64 @@
  * `orders` arrives newest first, because the query orders by createdAt
  * descending. A customer whose plan carries features.fullOrderHistory, or
  * everyone if the limit is switched off in the admin panel, sees the lot. */
-    async function limitOrderHistory(orders, statuses) {
-        var matching = orders.filter(function (order) {
-            return statuses.indexOf(order.status) !== -1 && withinOrderPeriod(order);
-        });
+    /* The ids a customer is allowed to see on this render, or null when they
+     * may see everything. Filled by applyFreeOrderAllowance() before any tab
+     * is built, so all four tabs draw from one decision. */
+    var allowedOrderIds = null;
 
+    async function applyFreeOrderAllowance() {
+        allowedOrderIds = null;
+
+        /* Fails OPEN. A customer must never lose sight of their own orders
+         * because an entitlement lookup errored - that reads as lost data. */
         if (await hasFullOrderHistory()) {
-            return matching;
+            return;
         }
 
         var freeLimit = await freeOrderHistoryLimit();
-        if (freeLimit <= 0 || matching.length <= freeLimit) {
-            return matching;
+        if (freeLimit <= 0) {
+            return;
         }
 
+        /* Newest first, because the query orders by createdAt descending. The
+         * period filter runs first so a chosen month is narrowed before the
+         * allowance is counted - though only a subscriber can choose one, and
+         * a subscriber is already past this point. */
+        var visible = [];
+        orderSnapshots.docs.forEach(function (doc) {
+            var order = doc.data();
+            order.id = doc.id;
+            if (withinOrderPeriod(order)) {
+                visible.push(order);
+            }
+        });
+
+        if (visible.length <= freeLimit) {
+            return;
+        }
+
+        allowedOrderIds = {};
+        visible.slice(0, freeLimit).forEach(function (order) {
+            allowedOrderIds[order.id] = true;
+        });
+
+        /* Shown only when the allowance actually hid something - reaching the
+         * ninth order, in the client's words, not merely having eight. */
         $('#order_history_notice_text').text(
             "{{ trans('lang.order_history_limited') }}".replace(':count', freeLimit)
         );
         $('#order_history_notice').show();
+    }
 
-        return matching.slice(0, freeLimit);
+    /* Narrows one tab to its own statuses, within what the allowance permits. */
+    async function limitOrderHistory(orders, statuses) {
+        return orders.filter(function (order) {
+            if (statuses.indexOf(order.status) === -1 || !withinOrderPeriod(order)) {
+                return false;
+            }
+
+            return allowedOrderIds === null || allowedOrderIds[order.id] === true;
+        });
     }
 
     async function buildHTMLCompletedOrders(completedorderSnapshots) {
