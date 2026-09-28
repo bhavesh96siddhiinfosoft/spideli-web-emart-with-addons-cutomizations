@@ -91,7 +91,12 @@
 </div>
 <!-- Store Select Model -->
 <div class="modal fade" id="select_store_model" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered notification-main" role="document">
+    {{-- modal-dialog-scrollable keeps the window the size it always was and
+         scrolls the list inside it. Without it the dialog grew with the
+         content, and it grew a lot once the services were grouped: five
+         headings on top of twelve tiles. Bootstrap 4.5 ships the class, so
+         this is the theme using what it already has rather than new CSS. --}}
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable notification-main" role="document">
         <div class="modal-content">
             <div class="modal-header justify-content-center">
                 <h5>{{ trans('lang.select_sections') }}</h5>
@@ -704,7 +709,7 @@
     }
 
     /* Group names arrive HTML-ESCAPED. The admin panel seeds them through
-     * Blade's {{ }}, which escapes, so Firestore literally holds
+     * Blade's double-brace echo, which escapes, so Firestore literally holds
      * "Online Shopping &amp; Restaurant". Escaping that again would show the
      * customer the &amp; itself.
      *
