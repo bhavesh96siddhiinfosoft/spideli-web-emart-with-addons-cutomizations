@@ -20,6 +20,17 @@ class HomeController extends Controller
         'Multivendor Delivery Service' => 'home_page.multivendor_home',
         'Cab Service'                  => 'home_page.cab_home',
         'On Demand Service'            => 'home_page.ondemand_home',
+
+        /*
+         * Document 2's services, listed so the grouped section list matches
+         * Document 1 page 9. Nothing is built behind them in any panel, so
+         * they share a screen that says so. Give one of these its own view
+         * here when the feature lands.
+         */
+        'Tontine Service'              => 'home_page.coming_soon_home',
+        'Loan Service'                 => 'home_page.coming_soon_home',
+        'Investment Service'           => 'home_page.coming_soon_home',
+        'AI Assistant Service'         => 'home_page.coming_soon_home',
     ];
 
     /**
@@ -51,13 +62,25 @@ class HomeController extends Controller
         $serviceType = $_COOKIE['service_type'] ?? '';
 
         /*
-         * The constructor has already sent anyone without a location to
-         * set-location, so this only catches a service_type that is set but
-         * unrecognised. Returning nothing renders as a blank page, so send
-         * them back to choose instead.
+         * A service type with no screen of its own.
+         *
+         * This used to redirect to set-location, which LOOPS: the customer
+         * chooses the service again, arrives here again, and is sent back
+         * again with no way out but picking something else. That was harmless
+         * while every type had a screen; it stops being harmless the moment
+         * an admin adds a type, which they can now do.
+         *
+         * The "coming soon" screen names the service and offers a way back,
+         * which is the honest answer to a service that exists but is not
+         * built. An empty service_type still goes to set-location - that is
+         * someone with no service chosen at all, not an unknown one.
          */
-        if (!isset(self::HOME_VIEWS[$serviceType])) {
+        if ($serviceType === '') {
             return redirect()->route('set-location');
+        }
+
+        if (!isset(self::HOME_VIEWS[$serviceType])) {
+            return view('home_page.coming_soon_home');
         }
 
         return view(self::HOME_VIEWS[$serviceType]);
