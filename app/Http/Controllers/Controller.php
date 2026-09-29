@@ -41,6 +41,9 @@ class Controller extends BaseController
         'sendContactUsMail',
         'sendMail',
         'changeLang',
+        /* Public parcel tracking: the receiver has no address set and must
+         * never be sent to choose one. */
+        'parcel_tracking',
     ];
 
     /**

@@ -132,6 +132,7 @@
 </div>
 <!-- End Add review -->
 @include('layouts.footer')
+@include('partials.order_receipt')
 @include('layouts.nav')
 
 <style>
@@ -147,6 +148,55 @@
 
 <script type="text/javascript">
     var append_categories = '';
+    /* Every parcel order on this screen, by id, so the download button can
+     * name the one it belongs to.
+     *
+     * Document 1 asks for a QR code for tracking and a barcode that IS the
+     * order number, both on the receipt. The QR carries the order's own
+     * page, so scanning it reaches the tracking rather than a bare number.
+     */
+    var parcelReceipts = {};
+
+    function recordParcelReceipt(val, figures) {
+        var lines = [];
+        var add = function (label, amount) {
+            if (amount) {
+                lines.push({ label: label, value: formatCurrency(amount, currencyData) });
+            }
+        };
+
+        add("{{ trans('lang.order_subtotal') }}", figures.subtotal);
+        add("{{ trans('lang.discount') }}", figures.discount);
+        add("{{ trans('lang.weight_charge') }}", figures.weightCharge);
+        add("{{ trans('lang.platform_charge') }}", figures.platformFee);
+        add("{{ trans('lang.tax') }}", figures.tax);
+
+        parcelReceipts[val.id] = {
+            title: "{{ trans('lang.receipt_title') }}",
+            orderNumber: val.id,
+            date: val.createdAt ? val.createdAt.toDate().toDateString() : '',
+            status: val.status || '',
+            storeName: (val.sender && val.sender.name) ? val.sender.name : '',
+            storeAddress: (val.sender && val.sender.address) ? val.sender.address : '',
+            billingName: (val.receiver && val.receiver.name) ? val.receiver.name : '',
+            billingAddress: (val.receiver && val.receiver.address) ? val.receiver.address : '',
+            items: [],
+            lines: lines,
+            total: formatCurrency(figures.total, currencyData),
+            paymentMethod: val.payment_method || '',
+            /* The barcode IS the order number, per Document 1. */
+            barcodeValue: val.id,
+            /* The QR points at the PUBLIC tracking page, not at this one.
+             * The person scanning is the receiver: no account, no address,
+             * and no way into a page that demands either. */
+            qrValue: "{{ route('parcel_tracking', ':id') }}".replace(':id', val.id)
+        };
+    }
+
+    /* Handed to the receipt partial when its button names an order. */
+    window.resolveOrderReceipt = function (id) {
+        return parcelReceipts[id] || null;
+    };
     var parcel_orders = database.collection('parcel_orders');
     var completedorsersref = database.collection('parcel_orders').where("authorID", "==", user_uuid).orderBy('createdAt', 'desc');
     var parcelcatref = database.collection('parcel_categories');
@@ -294,6 +344,18 @@
                 // Final total
                 let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount;
 
+                /* The figures this card just worked out, kept for the
+                 * receipt. Recorded per order because this screen lists
+                 * many; the order screens have one and fill it directly. */
+                recordParcelReceipt(val, {
+                    subtotal: order_subtotal,
+                    discount: total_discount,
+                    platformFee: platformFee,
+                    weightCharge: parcelWeightCharge,
+                    tax: total_tax_amount,
+                    total: order_total
+                });
+
                 var taxHtml = '';
                 if(total_tax_amount > 0){
                     taxHtml += renderTaxSection('order', 'Tax on Order Total');
@@ -390,6 +452,8 @@
                 }
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
+                    html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button></div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';
@@ -485,6 +549,18 @@
                 // Final total
                 let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount;
 
+                /* The figures this card just worked out, kept for the
+                 * receipt. Recorded per order because this screen lists
+                 * many; the order screens have one and fill it directly. */
+                recordParcelReceipt(val, {
+                    subtotal: order_subtotal,
+                    discount: total_discount,
+                    platformFee: platformFee,
+                    weightCharge: parcelWeightCharge,
+                    tax: total_tax_amount,
+                    total: order_total
+                });
+
                 var taxHtml = '';
                 if(total_tax_amount > 0){
                     taxHtml += renderTaxSection('order', 'Tax on Order Total');
@@ -551,6 +627,8 @@
                 }
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
+                    html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button></div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';
@@ -632,6 +710,18 @@
                 // Final total
                 let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount;
 
+                /* The figures this card just worked out, kept for the
+                 * receipt. Recorded per order because this screen lists
+                 * many; the order screens have one and fill it directly. */
+                recordParcelReceipt(val, {
+                    subtotal: order_subtotal,
+                    discount: total_discount,
+                    platformFee: platformFee,
+                    weightCharge: parcelWeightCharge,
+                    tax: total_tax_amount,
+                    total: order_total
+                });
+
                 var taxHtml = '';
                 if(total_tax_amount > 0){
                     taxHtml += renderTaxSection('order', 'Tax on Order Total');
@@ -698,6 +788,8 @@
                 }
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
+                    html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button></div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';

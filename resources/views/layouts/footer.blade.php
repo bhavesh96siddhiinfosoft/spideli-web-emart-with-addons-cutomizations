@@ -740,11 +740,10 @@
 
     /* Draws the section list into #section_lists, grouped.
      *
-     * UNGROUPED SERVICES COME FIRST, WITH NO HEADING. Every service is
-     * ungrouped until an admin sets it, so on the day this ships the screen
-     * looks exactly as it does now and the groups appear underneath as the
-     * client fills them in. Putting them under "Others" instead would file the
-     * whole list under a heading that means the opposite.
+     * AN UNGROUPED SERVICE GOES UNDER "OTHERS", which is settled with the
+     * client - page 9 lists Others as one of their own five groups. Only when
+     * Others itself has been deleted or unpublished does such a service fall
+     * to the top of the list with no heading, so it is never lost.
      *
      * AN EMPTY GROUP IS NOT DRAWN. A heading with nothing beneath it reads as
      * a fault.
@@ -767,6 +766,11 @@
         var known = {};
         groups.forEach(function (group) { known[String(group.id)] = []; });
 
+        /* Where an unplaced service goes. "others" is the id the admin panel
+         * seeds; the client may rename the group freely, which does not change
+         * the id, but they may also delete or unpublish it - hence the null. */
+        var othersId = known['others'] !== undefined ? 'others' : null;
+
         var ungrouped = [];
 
         snapshots.docs.forEach(function (doc) {
@@ -780,8 +784,21 @@
 
             var groupId = String(datas.serviceGroup || '');
 
+            /* A service with no group, or one pointing at a group that has
+             * been deleted or unpublished, goes under OTHERS.
+             *
+             * Settled with the client, recorded in the admin repo's
+             * MESSAGES-AND-QUESTIONS-LOG.txt: page 9 lists Others as one of
+             * their own five groups, holding the AI Assistant. It is where an
+             * unplaced service belongs.
+             *
+             * If Others itself is gone - the client can unpublish or delete
+             * it - such a service is listed first with no heading rather than
+             * hidden. Never lose a service to a setting on something else. */
             if (groupId !== '' && known[groupId]) {
                 known[groupId].push(datas);
+            } else if (othersId !== null) {
+                known[othersId].push(datas);
             } else {
                 ungrouped.push(datas);
             }

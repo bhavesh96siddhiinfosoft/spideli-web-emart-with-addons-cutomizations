@@ -12,6 +12,13 @@
 --}}
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.24/jspdf.plugin.autotable.min.js"></script>
+{{--
+    For the parcel receipt only. Document 1 asks for a QR code for tracking and
+    a barcode that IS the order number, both on the receipt. Loaded from the
+    same CDN as jsPDF, and only on the screens that include this partial.
+--}}
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="text/javascript">
     /* Everything the receipt needs, filled in by the screen that includes
      * this. Left empty until then so a mis-timed click cannot half-build a
@@ -125,7 +132,103 @@
             doc.text("{{ trans('lang.payment_methods') }}: " + orderReceipt.paymentMethod, left, y);
         }
 
+        /* The QR code and the barcode, when the screen asked for them. A
+         * screen that does not set them - every order screen except parcel -
+         * is unaffected.
+         *
+         * Drawn last so a failure in either cannot cost the customer the rest
+         * of the receipt: the figures are already on the page by this point. */
+        y = drawReceiptCodes(doc, left, y);
+
         doc.save(receiptFileName());
+    }
+
+    /* Renders the QR code and barcode into the PDF and returns the new y.
+     *
+     * Both are drawn from a canvas the browser has already rendered, because
+     * jsPDF cannot draw either natively. Either one missing, or its library
+     * failing to load, is stepped over rather than thrown - a receipt without
+     * a barcode is worth more than no receipt.
+     */
+    function drawReceiptCodes(doc, left, y) {
+        var qr = orderReceipt.qrValue ? receiptQrDataUrl(orderReceipt.qrValue) : null;
+        var barcode = orderReceipt.barcodeValue ? receiptBarcodeDataUrl(orderReceipt.barcodeValue) : null;
+
+        if (!qr && !barcode) {
+            return y;
+        }
+
+        y += 24;
+
+        if (qr) {
+            doc.addImage(qr, 'PNG', left, y, 90, 90);
+            doc.setFontSize(8);
+            doc.text("{{ trans('lang.receipt_scan_to_track') }}", left, y + 102);
+        }
+
+        if (barcode) {
+            /* Beside the QR when both are present, so the receipt stays on one
+             * page. The barcode IS the order number, per Document 1, so the
+             * number is printed under it for anyone keying it by hand. */
+            var barcodeLeft = qr ? left + 120 : left;
+            doc.addImage(barcode, 'PNG', barcodeLeft, y, 200, 70);
+            doc.setFontSize(8);
+            doc.text(String(orderReceipt.barcodeValue), barcodeLeft, y + 82);
+        }
+
+        return y + 110;
+    }
+
+    function receiptQrDataUrl(value) {
+        try {
+            if (typeof QRCode === 'undefined') {
+                return null;
+            }
+
+            /* QRCode writes into an element, so it gets a detached one. */
+            var holder = document.createElement('div');
+            new QRCode(holder, {
+                text: String(value),
+                width: 180,
+                height: 180,
+                correctLevel: QRCode.CorrectLevel.M
+            });
+
+            var canvas = holder.querySelector('canvas');
+            if (canvas) {
+                return canvas.toDataURL('image/png');
+            }
+
+            /* Older browsers get an <img> with a data URL instead. */
+            var img = holder.querySelector('img');
+            return img ? img.src : null;
+        } catch (e) {
+            console.error('receipt QR code could not be drawn', e);
+            return null;
+        }
+    }
+
+    function receiptBarcodeDataUrl(value) {
+        try {
+            if (typeof JsBarcode === 'undefined') {
+                return null;
+            }
+
+            var canvas = document.createElement('canvas');
+            JsBarcode(canvas, String(value), {
+                format: 'CODE128',
+                displayValue: false,
+                margin: 0,
+                height: 60
+            });
+
+            return canvas.toDataURL('image/png');
+        } catch (e) {
+            /* CODE128 takes anything printable, but a value with a character
+             * it cannot encode should not cost the customer their receipt. */
+            console.error('receipt barcode could not be drawn', e);
+            return null;
+        }
     }
 
     /* Right-aligned value against a left label, the way a receipt reads. */
@@ -162,6 +265,15 @@
     }
 
     $(document).on('click', '.download-receipt-btn', function () {
+        /* The order screens show ONE order and fill orderReceipt directly. A
+         * list screen - parcel orders - has many, so its button names which
+         * one and the page hands back that order's figures. */
+        var id = $(this).attr('data-receipt-id');
+
+        if (id && typeof window.resolveOrderReceipt === 'function') {
+            orderReceipt = window.resolveOrderReceipt(id);
+        }
+
         downloadOrderReceipt();
     });
 </script>
