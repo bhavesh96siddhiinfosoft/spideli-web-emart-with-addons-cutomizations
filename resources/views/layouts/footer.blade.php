@@ -738,6 +738,12 @@
         return $('<div>').text(decoder.value).html();
     }
 
+    /* Set while a load is in flight. The emptiness check in renderSectionList
+     * cannot stand alone now that the modal has more than one trigger: two can
+     * fire in the same tick, and the first await returns to an equally empty
+     * container, so both would query Firestore and draw the list twice. */
+    var sectionListLoading = false;
+
     /* Draws the section list into #section_lists, grouped.
      *
      * AN UNGROUPED SERVICE GOES UNDER "OTHERS", which is settled with the
@@ -755,9 +761,20 @@
     async function renderSectionList(activeSectionId) {
         var container = $("#section_lists");
 
-        if (container.length === 0 || container.html() != '') {
+        if (container.length === 0 || container.html() != '' || sectionListLoading) {
             return;
         }
+
+        sectionListLoading = true;
+
+        try {
+            await drawSectionList(container, activeSectionId);
+        } finally {
+            sectionListLoading = false;
+        }
+    }
+
+    async function drawSectionList(container, activeSectionId) {
 
         var snapshots = await database.collection('sections')
             .where('isActive', '==', true).orderBy('order').get();
@@ -856,9 +873,36 @@
         var userDetailsRef = database.collection('users').where('id', "==", cuser_id);
     }
     
-    $('#select_store_model_call').bind('click', function() {
+    /* THE SECTION LIST LOADS WHEN THE MODAL OPENS, not when one particular
+     * button is clicked.
+     *
+     * The footer's own "Select Section" tab used to be the only trigger that
+     * filled it, so every other way into the same modal opened it EMPTY - the
+     * "choose another service" button on a coming-soon page did exactly that,
+     * and anything added later would have done the same.
+     *
+     * BOUND BOTH WAYS ON PURPOSE. This theme loads Bootstrap 4 and Bootstrap
+     * 5. BS4 fires show.bs.modal through jQuery, which a native listener never
+     * sees; BS5 dispatches a real DOM event, which a jQuery handler never
+     * sees. Whichever one ends up handling the modal, one of these fires.
+     * renderSectionList returns early once the list is filled, so being called
+     * twice costs nothing. */
+    function loadSectionListForModal() {
         renderSectionList("<?php echo @$_COOKIE['section_id']; ?>");
-    });
+    }
+
+    $('#select_store_model').on('show.bs.modal', loadSectionListForModal);
+
+    var selectStoreModelEl = document.getElementById('select_store_model');
+
+    if (selectStoreModelEl) {
+        selectStoreModelEl.addEventListener('show.bs.modal', loadSectionListForModal);
+    }
+
+    /* Kept as well: this tab is clicked programmatically above when a visitor
+     * arrives with no section, and the click is the one trigger that does not
+     * depend on either Bootstrap handling the modal. */
+    $('#select_store_model_call').bind('click', loadSectionListForModal);
     
   
     function init() {

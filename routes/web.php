@@ -120,6 +120,10 @@ Route::get('notify', [CheckoutController::class, 'notify'])->name('notify');
 Route::get('transactions', [TransactionController::class, 'index'])->name('transactions');
 Route::get('offers', [OffersController::class, 'index'])->name('offers');
 Route::get('profile', [ProfileController::class, 'index'])->name('profile');
+/* Business account application - the customer half of APP-SPEC-ADMIN.md 18.
+ * The app could already apply and the admin could already approve; the website
+ * had no way in at all. */
+Route::get('business-account', [App\Http\Controllers\BusinessAccountController::class, 'index'])->name('business_account');
 Route::get('favorite-stores', [FavoritesController::class, 'index'])->name('favorites');
 Route::get('favorite-products', [FavoritesController::class, 'favProduct'])->name('favorites.product');
 

@@ -107,6 +107,7 @@
                             <div class="dropdown-menu dropdown-menu-right" aria-labelledby="dropdownMenuButton">
                                 @auth
                                     <a class="dropdown-item" href="{{route('profile')}}">{{trans('lang.my_account')}}</a>
+                                    <a class="dropdown-item" href="{{route('business_account')}}">{{trans('lang.business_account_title')}}</a>
                                     <?php
                                     if (@$_COOKIE['service_type'] == "Multivendor Delivery Service" || @$_COOKIE['service_type'] == 'Ecommerce Service') {
                                         ?>
