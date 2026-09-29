@@ -2167,6 +2167,23 @@
         var full_address = '';
         if (cuser_id != "") {
             userDetailsRef.get().then(async function(userSnapshots) {
+                /* NO MATCHING RECORD IS POSSIBLE FOR A SIGNED-IN VISITOR.
+                 * cuser_id comes from the MySQL side; the document it points at
+                 * lives in Firestore and can be missing - deleted from the admin
+                 * panel while the customer is still signed in, or written without
+                 * its own `id` field, which is what this query matches on.
+                 *
+                 * Reading docs[0] regardless threw "Cannot read properties of
+                 * undefined" INSIDE A PROMISE WITH NO CATCH, so the address was
+                 * silently not saved and the console carried an unhandled
+                 * rejection. The address still belongs in the cookies, which is
+                 * what the whole panel reads it from. */
+                if (!userSnapshots.docs.length) {
+                    console.warn('no users record for this account; address saved to cookies only');
+                    await saveShippingAddressToCookies();
+                    return;
+                }
+
                 var userDetails = userSnapshots.docs[0].data();
                 if (userDetails.hasOwnProperty('shippingAddress')) {
                     var shippingAddress = userDetails.shippingAddress;
@@ -2214,36 +2231,62 @@
                 }).then(function(result) {
                     $('#close_button').trigger("click");
                     location.reload();
+                }).catch(async function(error) {
+                    /* The cookies are what every screen in this panel actually
+                     * reads the address from, so a failed write to the customer's
+                     * record must not leave them with no address at all. */
+                    console.error('shipping address could not be saved to the account', error);
+                    await saveShippingAddressToCookies();
                 });
+            }).catch(async function(error) {
+                console.error('account record could not be read; address saved to cookies only', error);
+                await saveShippingAddressToCookies();
             });
         } else {
-            setCookie('address_name1', line1, 365);
-            setCookie('address_name2', line2, 365);
-            setCookie('address_lat', jQuery("#address_lat").val(), 365);
-            setCookie('address_lng', jQuery("#address_lng").val(), 365);
-            setCookie('address_zip', postalCode, 365);
-            setCookie('address_city', city, 365);
-            setCookie('address_country', country, 365);
-            await setUserCountryCookie(jQuery("#address_lat").val(), jQuery("#address_lng").val());
-            if (line1 != "") {
-                full_address = line1;
-            }
-            if (line2 != "") {
-                full_address = full_address + ',' + line2;
-            }
-            if (postalCode != "") {
-                full_address = full_address + ',' + postalCode;
-            }
-            if (city != "") {
-                full_address = full_address + ',' + city;
-            }
-            if (country != "") {
-                full_address = full_address + ',' + country;
-            }
-            setCookie('address_name', full_address, 365);
-            $('#close_button').trigger("click");
-            location.reload();
+            await saveShippingAddressToCookies();
         }
+    }
+
+    /* Writes the address to cookies and closes the window. This is the whole
+     * of what a signed-out visitor's save does, and it is also the FALLBACK
+     * for a signed-in one whose Firestore record cannot be read.
+     *
+     * Reads the fields again rather than taking them as arguments so there is
+     * one place they are named, and no chance of the two callers drifting. */
+    async function saveShippingAddressToCookies() {
+        var line1 = $("#address_line1").val();
+        var line2 = $("#address_line2").val();
+        var city = $("#address_city").val();
+        var country = $("#address_country").val();
+        var postalCode = $("#address_zipcode").val();
+        var full_address = '';
+
+        setCookie('address_name1', line1, 365);
+        setCookie('address_name2', line2, 365);
+        setCookie('address_lat', jQuery("#address_lat").val(), 365);
+        setCookie('address_lng', jQuery("#address_lng").val(), 365);
+        setCookie('address_zip', postalCode, 365);
+        setCookie('address_city', city, 365);
+        setCookie('address_country', country, 365);
+        await setUserCountryCookie(jQuery("#address_lat").val(), jQuery("#address_lng").val());
+        if (line1 != "") {
+            full_address = line1;
+        }
+        if (line2 != "") {
+            full_address = full_address + ',' + line2;
+        }
+        if (postalCode != "") {
+            full_address = full_address + ',' + postalCode;
+        }
+        if (city != "") {
+            full_address = full_address + ',' + city;
+        }
+        if (country != "") {
+            full_address = full_address + ',' + country;
+        }
+        setCookie('address_name', full_address, 365);
+        $('#close_button').trigger("click");
+        location.reload();
     }
     function setCookie(name, value, days) {
         var expires = "";
@@ -2323,13 +2366,38 @@
          if(getCookie('section_id')){
             let sectionRef = await database.collection('sections').doc(getCookie('section_id')).get();
             var adminCommissionSettings = sectionRef.data();
-            localStorage.setItem('adminCommissionSettings', JSON.stringify(adminCommissionSettings.adminCommision));
-            localStorage.setItem('platformFeeSettings', JSON.stringify(adminCommissionSettings.platformFee));
-            localStorage.setItem('packagingChargeEnable', adminCommissionSettings.packagingChargeEnable);
+
+            /* A SECTION COOKIE CAN OUTLIVE THE SECTION. It is kept for a year,
+             * and the section behind it can be deleted or renamed in the admin
+             * panel meanwhile - .data() is then undefined and reading
+             * .adminCommision off it threw.
+             *
+             * This sits near the TOP of the ready handler, so that throw took
+             * everything below it with it, including the block that draws the
+             * signed-in customer's name and avatar. A stale cookie must not
+             * cost a visitor their header. */
+            if (adminCommissionSettings) {
+                localStorage.setItem('adminCommissionSettings', JSON.stringify(adminCommissionSettings.adminCommision));
+                localStorage.setItem('platformFeeSettings', JSON.stringify(adminCommissionSettings.platformFee));
+                localStorage.setItem('packagingChargeEnable', adminCommissionSettings.packagingChargeEnable);
+            } else {
+                console.warn('section cookie points at a section that no longer exists');
+            }
         }
         
         if (user_ref != '') {
             user_ref.get().then(async function(profileSnapshots) {
+                /* AN EMPTY RESULT LEAVES THE ACCOUNT BUTTON BLANK, and a blank
+                 * dropdown-toggle has nothing to click - a signed-in customer
+                 * whose Firestore record is missing loses the whole account
+                 * menu, with no sign-in link either, because Blade already knows
+                 * they are signed in. Give the button a label so the menu stays
+                 * reachable. */
+                if (!profileSnapshots.docs.length) {
+                    console.warn('no users record for this account; account menu shown without a name');
+                    $("#dropdownMenuButton").append('<img alt="#" src="' + placeholderImage + '" class="img-fluid rounded-circle header-user mr-2 header-user">' + "{{ trans('lang.my_account') }}");
+                }
+
                 if (profileSnapshots.docs.length) {
                     var profile_user = profileSnapshots.docs[0].data();
                     var profile_name = profile_user.firstName + " " + profile_user.lastName;
