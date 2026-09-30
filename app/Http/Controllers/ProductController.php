@@ -120,7 +120,10 @@ class ProductController extends Controller
          * hand-made request. Refused outright: selling it at retail in ones
          * would contradict the store, and raising it to the pack minimum would
          * hand that customer a basket of fifty. */
-        if ($this->isBlockedWholesaleOnly($req['sale_type'] ?? null)) {
+        if ($this->isBlockedWholesaleOnly(
+            $req['sale_type'] ?? null,
+            filter_var($req['wholesale_business_only'] ?? false, FILTER_VALIDATE_BOOLEAN)
+        )) {
             echo json_encode([
                 'status' => false,
                 'message' => trans('lang.wholesale_business_only')
@@ -155,7 +158,11 @@ class ProductController extends Controller
             "wholesale_price" => $req['wholesale_price'] ?? '',
             "wholesale_min_qty" => $req['wholesale_min_qty'] ?? '',
             "wholesale_tiers" => $this->normaliseWholesaleTiers($req['wholesale_tiers'] ?? null),
-            "sale_type" => $this->normaliseSaleType($req['sale_type'] ?? null)
+            "sale_type" => $this->normaliseSaleType($req['sale_type'] ?? null),
+            /* The product's own business-only setting, written by the store
+               panel and the store app. Only ever tightens - see
+               productNeedsBusinessAccount(). */
+            "wholesale_business_only" => filter_var($req['wholesale_business_only'] ?? false, FILTER_VALIDATE_BOOLEAN)
         ];
 
         /* A wholesale-only product is not sold singly. The quantity box on
@@ -398,7 +405,7 @@ class ProductController extends Controller
          * out, because this is where the line is priced and the tiers arrive
          * in the request. Everything below is skipped, so the line is charged
          * retail and records no applied tier. */
-        if (!static::isApprovedBusinessCustomer()) {
+        if (!$this->mayBuyWholesaleOf($item)) {
             $item['wholesale_tiers'] = [];
             $item['is_wholesale'] = false;
             $item['item_price'] = $retail;
@@ -491,7 +498,7 @@ class ProductController extends Controller
          * buy wholesale, because they may not buy it AT ALL - it is hidden
          * from them. Forcing the pack minimum here would be the one way such a
          * customer could end up with a basket of fifty. */
-        if (!static::isApprovedBusinessCustomer()) {
+        if (!$this->mayBuyWholesaleOf($item)) {
             return $quantity;
         }
 
@@ -510,10 +517,59 @@ class ProductController extends Controller
      * that does not stop being true because the shopper has no business
      * account.
      */
-    private function isBlockedWholesaleOnly($saleType)
+    /**
+     * Whether this line's product needs an approved business account for its
+     * wholesale prices.
+     *
+     * TWO RULES, COMBINED WITH OR so the product's own flag can only tighten:
+     *
+     *   the platform's    wholesale is for approved business accounts, on
+     *   (client, 30 Sep)  every product
+     *
+     *   the product's     `wholesaleBusinessOnly`, set per product in the
+     *                     store panel and the store app
+     *
+     * The product flag defaults to FALSE, so honouring it alone would open
+     * every existing product - none has ever had it set - to ordinary
+     * customers. That is the reverse of the 30 September decision, hence the
+     * OR rather than a straight read.
+     *
+     * While WHOLESALE_IS_BUSINESS_ONLY_PLATFORM_WIDE is true this returns true
+     * for everything and the flag changes nothing. It is wired up so that if
+     * the client moves to per-product control, flipping that one constant is
+     * the whole CODE change.
+     *
+     * !! IT IS NOT A SAFE FLIP ON ITS OWN. False here opens every product
+     * whose flag is absent or false, and the store panel writes false by
+     * default. The data has to be set deliberately first; nothing in the
+     * record distinguishes "the vendor chose open" from "never set".
+     *
+     * Mirrors productNeedsBusinessAccount() in layouts/footer.blade.php. The
+     * browser posts the flag; a posted field is whatever the poster says it
+     * is, which is exactly why the OR lives here too.
+     */
+    const WHOLESALE_IS_BUSINESS_ONLY_PLATFORM_WIDE = true;
+
+    private function productNeedsBusinessAccount($item)
+    {
+        return self::WHOLESALE_IS_BUSINESS_ONLY_PLATFORM_WIDE
+            || !empty($item['wholesale_business_only']);
+    }
+
+    /**
+     * May this customer have wholesale prices on this line? Approved accounts
+     * always may; anyone else only where the product needs no account at all.
+     */
+    private function mayBuyWholesaleOf($item)
+    {
+        return static::isApprovedBusinessCustomer()
+            || !$this->productNeedsBusinessAccount($item);
+    }
+
+    private function isBlockedWholesaleOnly($saleType, $businessOnly = false)
     {
         return $this->normaliseSaleType($saleType) === 'wholesale'
-            && !static::isApprovedBusinessCustomer();
+            && !$this->mayBuyWholesaleOf(['wholesale_business_only' => $businessOnly]);
     }
 
     public function distance($lat1, $lon1, $lat2, $lon2, $unit)

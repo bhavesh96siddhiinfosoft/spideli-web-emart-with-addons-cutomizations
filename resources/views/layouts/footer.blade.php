@@ -3464,6 +3464,50 @@
      * APP-SPEC-WEB.md 19.
      * -------------------------------------------------------------------- */
 
+
+    /* ---- Does THIS product need a business account? ----------------------
+     *
+     * Two rules exist and they sit at different levels:
+     *
+     *   the platform's     wholesale is for approved business accounts,
+     *   (client, 30 Sep)   on every product, full stop
+     *
+     *   the product's      `wholesaleBusinessOnly`, written by the store
+     *   (store app/panel)  panel and the store app for ONE product
+     *
+     * They are combined with OR, so the product flag can only ever TIGHTEN
+     * the rule, never loosen it. That matters because the flag defaults to
+     * FALSE: reading it on its own would open every existing product - none
+     * of which has ever had it set - to ordinary customers, which is the
+     * exact reversal of the 30 September decision.
+     *
+     * While WHOLESALE_IS_BUSINESS_ONLY_PLATFORM_WIDE is true the product flag
+     * changes nothing, because the platform rule already covers everything.
+     * It is wired up anyway so that IF the client ever moves to per-product
+     * control, flipping that one constant is the whole code change.
+     *
+     * !! FLIPPING IT IS NOT SAFE ON ITS OWN. With it false, a product whose
+     * flag is absent OR false is open to every customer - and the store panel
+     * writes false by default, so that is most of the catalogue. There is no
+     * way to tell "the vendor chose open" from "nobody ever set it". Anyone
+     * flipping this must set wholesaleBusinessOnly on the existing products
+     * first, as a deliberate data decision, and that is the client's call.
+     * -------------------------------------------------------------------- */
+
+    var WHOLESALE_IS_BUSINESS_ONLY_PLATFORM_WIDE = true;
+
+    function productNeedsBusinessAccount(product) {
+        return WHOLESALE_IS_BUSINESS_ONLY_PLATFORM_WIDE
+            || (product && product.wholesaleBusinessOnly === true);
+    }
+
+    /* May this customer have wholesale prices on this product? Approved
+     * accounts always may; anyone else may only where the product does not
+     * require an account at all. */
+    function mayBuyWholesaleOf(product) {
+        return customerMayBuyWholesale || !productNeedsBusinessAccount(product);
+    }
+
     var customerMayBuyWholesale = false;
 
     async function loadBusinessAccountStatus() {
@@ -3513,7 +3557,7 @@
         return !!(product
             && product.wholesaleEnabled === true
             && String(product.saleType || '').toLowerCase() === 'wholesale'
-            && !customerMayBuyWholesale);
+            && !mayBuyWholesaleOf(product));
     }
 
     /* Drops the products this customer may not see. Screens await
@@ -3655,7 +3699,8 @@
          * ladder, the minimum quantity, the price actually charged - is
          * already gated on wholesaleEnabled, so withholding it here withholds
          * wholesale everywhere at once rather than in seven screens. */
-        final_price.wholesaleEnabled = productData.wholesaleEnabled === true && customerMayBuyWholesale;
+        final_price.wholesaleEnabled = productData.wholesaleEnabled === true
+            && mayBuyWholesaleOf(productData);
         final_price.wholesaleMinQty = parseInt(productData.wholesaleMinQty || 0) || 0;
 
         /* The same verdict as hiddenWholesaleOnlyProduct(), carried on the
@@ -3666,7 +3711,11 @@
          * which survives an empty priceData. */
         final_price.wholesaleOnlyHidden = productData.wholesaleEnabled === true
             && String(productData.saleType || '').toLowerCase() === 'wholesale'
-            && !customerMayBuyWholesale;
+            && !mayBuyWholesaleOf(productData);
+
+        /* Carried so the detail page can post it: the server re-checks the
+         * same rule and cannot read the product document itself. */
+        final_price.wholesaleBusinessOnly = productData.wholesaleBusinessOnly === true;
 
 
         /* The store's three-way choice: "retail", "wholesale" (sold ONLY in

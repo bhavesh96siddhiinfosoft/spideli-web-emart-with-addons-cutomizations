@@ -283,6 +283,7 @@
             var wholesale_price = $('#wholesale_price_' + id).val() || '';
             var wholesale_min_qty = $('#wholesale_min_qty_' + id).val() || '';
             var sale_type = $('#sale_type_' + id).val() || 'both';
+            var wholesale_business_only = $('#wholesale_business_only_' + id).val() === '1';
             var min_order_qty = parseInt($('#min_order_qty_' + id).val() || 1) || 1;
 
             /* Sold in packs. The box already starts at the minimum and the
@@ -417,6 +418,7 @@
                 wholesale_min_qty,
                 wholesale_tiers,
                 sale_type,
+                wholesale_business_only,
                 specialOfferForHour,
                 decimal_degits,
                 distanceType,
@@ -1541,6 +1543,7 @@
              * after they have chosen. Worked out here because the box is
              * drawn before the wholesale block below. */
             var sale_type = final_price.saleType || 'both';
+            var wholesale_business_only = final_price.wholesaleBusinessOnly === true ? '1' : '0';
             var min_order_qty = minimumOrderQuantity(final_price);
 
             html = html + '<div class="quantity mt-2 mb-3">';
@@ -1621,6 +1624,7 @@
             html += '<input type="hidden" id="wholesale_min_qty_' + vendorProduct.id + '" value="' + wholesale_min_qty + '">';
             html += '<input type="hidden" id="wholesale_tiers_' + vendorProduct.id + '" value="' + wholesale_tiers + '">';
             html += '<input type="hidden" id="sale_type_' + vendorProduct.id + '" value="' + sale_type + '">';
+            html += '<input type="hidden" id="wholesale_business_only_' + vendorProduct.id + '" value="' + wholesale_business_only + '">';
             html += '<input type="hidden" id="min_order_qty_' + vendorProduct.id + '" value="' + min_order_qty + '">';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block booknow' >{{trans('lang.book_now')}}</button>";
             html = html + '<div class="description mt-2 mb-3">';
