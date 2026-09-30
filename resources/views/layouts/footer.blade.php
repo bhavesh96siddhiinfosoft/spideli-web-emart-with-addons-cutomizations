@@ -175,7 +175,12 @@
     var mapTypeDoc = database.collection('settings').doc('DriverNearBy');
     mapTypeDoc.get().then(async function(snapshots) {
         var mapTypeData = snapshots.data();
-        mapType = mapTypeData.selectedMapType;
+
+        /* No settings document leaves mapType as '', which every reader below
+         * already treats as "not google" - so the map still loads. */
+        if (mapTypeData) {
+            mapType = mapTypeData.selectedMapType;
+        }
     })
 
     var invalidUserIds = [];
@@ -189,7 +194,11 @@
             var businessModel = database.collection('settings').doc("vendor");
             await businessModel.get().then(async function(snapshots) {
                 var businessModelSettings = snapshots.data();
-                if (businessModelSettings.hasOwnProperty('subscription_model') && businessModelSettings.subscription_model == true) {
+
+                /* AWAITED, so a throw here rejects the caller rather than
+                 * staying in this promise - and the caller decides which
+                 * stores and services a visitor may see. */
+                if (businessModelSettings && businessModelSettings.hasOwnProperty('subscription_model') && businessModelSettings.subscription_model == true) {
                     subscriptionModel = true;
                 }
             });
@@ -326,7 +335,11 @@
             var businessModel = database.collection('settings').doc("vendor");
             await businessModel.get().then(async function(snapshots) {
                 var businessModelSettings = snapshots.data();
-                if (businessModelSettings.hasOwnProperty('subscription_model') && businessModelSettings.subscription_model == true) {
+
+                /* AWAITED, so a throw here rejects the caller rather than
+                 * staying in this promise - and the caller decides which
+                 * stores and services a visitor may see. */
+                if (businessModelSettings && businessModelSettings.hasOwnProperty('subscription_model') && businessModelSettings.subscription_model == true) {
                     subscriptionModel = true;
                 }
             });
@@ -390,7 +403,10 @@
     async function loadGoogleMapsScript() {
         await database.collection('settings').doc("googleMapKey").get().then(function(googleMapKeySnapshotsHeader) {
             var placeholderImageHeaderData = googleMapKeySnapshotsHeader.data();
-            googleMapKey = placeholderImageHeaderData.key;
+
+            /* AWAITED, and it loads the maps script every address field needs.
+             * An absent settings document left the key unread and threw. */
+            googleMapKey = placeholderImageHeaderData ? (placeholderImageHeaderData.key || '') : '';
             const script = document.createElement('script');
             if (mapType == 'google') {
                 script.src = "https://maps.googleapis.com/maps/api/js?key=" + googleMapKey + "&libraries=places";
@@ -430,7 +446,10 @@
     var placeholder = database.collection('settings').doc('placeHolderImage');
     placeholder.get().then(async function(snapshotsimage) {
         var placeholderImageData = snapshotsimage.data();
-        placeholderImage = placeholderImageData.image;
+
+        if (placeholderImageData) {
+            placeholderImage = placeholderImageData.image;
+        }
     })
     var service_type = getCookie('service_type');
     var footerRef = database.collection('settings').doc('footerTemplate');
@@ -1351,6 +1370,12 @@
             database.collection('users').doc(userId).get(),
             emailTemplatesPromise
         ]);
+        /* NO TEMPLATE MEANS NO EMAIL. The admin can rename or delete a
+         * template type, and docs[0] on an empty result threw - DURING
+         * ORDER PLACEMENT, so a missing template failed the order rather
+         * than just the mail. */
+        if (emailTempSnapshot.empty) return;
+
         if (!orderRef.exists || !userRef.exists) return;
 
         const orderDetails = orderRef.data();
@@ -1615,6 +1640,12 @@
             database.collection('providers_services').doc(serviceId).get(),
             emailTemplatesPromise
         ]);
+        /* NO TEMPLATE MEANS NO EMAIL. The admin can rename or delete a
+         * template type, and docs[0] on an empty result threw - DURING
+         * ORDER PLACEMENT, so a missing template failed the order rather
+         * than just the mail. */
+        if (emailTempSnapshot.empty) return;
+
         if (!orderRef.exists || !userRef.exists || !serviceRef.exists) return;
 
         const orderDetails = orderRef.data();
@@ -1775,6 +1806,12 @@
             database.collection('users').doc(userId).get(),
             emailTemplatesPromise
         ]);
+        /* NO TEMPLATE MEANS NO EMAIL. The admin can rename or delete a
+         * template type, and docs[0] on an empty result threw - DURING
+         * ORDER PLACEMENT, so a missing template failed the order rather
+         * than just the mail. */
+        if (emailTempSnapshot.empty) return;
+
         if (!orderRef.exists || !userRef.exists) return;
 
         const orderDetails = orderRef.data();
@@ -2333,7 +2370,10 @@
     var googleMapKeySettingHeader = database.collection('settings').doc("googleMapKey");
     googleMapKeySettingHeader.get().then(async function(googleMapKeySnapshotsHeader) {
         var placeholderImageHeaderData = googleMapKeySnapshotsHeader.data();
-        placeholderImageHeader = placeholderImageHeaderData.placeHolderImage;
+
+        if (placeholderImageHeaderData) {
+            placeholderImageHeader = placeholderImageHeaderData.placeHolderImage;
+        }
     })
     var user_email = "<?php echo $user_email; ?>";
     var user_ref = '';
@@ -2346,8 +2386,11 @@
     var ref = database.collection('settings').doc("globalSettings");
     ref.get().then(async function(snapshots) {
         var globalSettings = snapshots.data();
-        $("#logo_web").attr('src', globalSettings.appLogo);
-        $("#footer_logo_web").attr('src', globalSettings.appLogo);
+
+        if (globalSettings) {
+            $("#logo_web").attr('src', globalSettings.appLogo);
+            $("#footer_logo_web").attr('src', globalSettings.appLogo);
+        }
     });
 
     $(document).ready(async function() {
@@ -2968,6 +3011,15 @@
         const snapshots = await database.collection('zone').where("publish", "==", true).get();
         for (const snapshot of snapshots.docs) {
             const zone = snapshot.data();
+
+            /* A ZONE SAVED WITHOUT ITS POLYGON STOPS THE LOOP DEAD, and this
+             * function decides the delivery zone for EVERY visitor. Skip the
+             * broken one rather than lose the rest - the zone screen was
+             * rewritten on 29 Sep, so a half-saved zone is not hypothetical. */
+            if (!zone || !Array.isArray(zone.area)) {
+                continue;
+            }
+
             const vertices_x = [];
             const vertices_y = [];
             for (const point of zone.area) {
