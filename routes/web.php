@@ -124,6 +124,9 @@ Route::get('profile', [ProfileController::class, 'index'])->name('profile');
  * The app could already apply and the admin could already approve; the website
  * had no way in at all. */
 Route::get('business-account', [App\Http\Controllers\BusinessAccountController::class, 'index'])->name('business_account');
+/* Saved mobile money numbers - the customer half of APP-SPEC-CUSTOMER-APP 7.
+ * A store, not a checkout step: no gateway in this panel collects a number. */
+Route::get('payment-methods', [App\Http\Controllers\PaymentMethodController::class, 'index'])->name('payment_methods');
 Route::get('favorite-stores', [FavoritesController::class, 'index'])->name('favorites');
 Route::get('favorite-products', [FavoritesController::class, 'favProduct'])->name('favorites.product');
 

@@ -75,6 +75,7 @@
             @endif
             <li><a href="{{route('profile')}}"><i class="fa fa-user mr-2"></i>{{trans('lang.user_profile')}}</a></li>
             <li><a href="{{route('business_account')}}"><i class="fa fa-briefcase mr-2"></i>{{trans('lang.business_account_title')}}</a></li>
+            <li><a href="{{route('payment_methods')}}"><i class="fa fa-credit-card mr-2"></i>{{trans('lang.payment_methods_title')}}</a></li>
             <li><a href="{{route('contact_us')}}"><i class="fa fa-phone mr-2"></i>{{trans('lang.contact_us')}}</a></li>
             <li><a href="{{route('logout')}}"
                    onclick="event.preventDefault(); document.getElementById('logout-form').submit();"><i

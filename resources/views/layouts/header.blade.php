@@ -108,6 +108,7 @@
                                 @auth
                                     <a class="dropdown-item" href="{{route('profile')}}">{{trans('lang.my_account')}}</a>
                                     <a class="dropdown-item" href="{{route('business_account')}}">{{trans('lang.business_account_title')}}</a>
+                                    <a class="dropdown-item" href="{{route('payment_methods')}}">{{trans('lang.payment_methods_title')}}</a>
                                     <?php
                                     if (@$_COOKIE['service_type'] == "Multivendor Delivery Service" || @$_COOKIE['service_type'] == 'Ecommerce Service') {
                                         ?>
