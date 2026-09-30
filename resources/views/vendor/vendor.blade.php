@@ -161,18 +161,38 @@
         getCouponDetails();
     });
     async function getCategories() {
-        var vendorCategoryIds = [];
+        await businessAccountReady;
+
+        /* A CATEGORY IS ONLY WORTH LISTING IF THIS CUSTOMER CAN SEE SOMETHING
+         * IN IT. Wholesale-only products are hidden from a customer without an
+         * approved business account, so a category holding nothing else became
+         * a heading that leads to an empty page - which is how it was reported
+         * on 30 Sep: "Women's Wear" listing one Kurti that is not shown.
+         *
+         * Counted here in the pass that is already running, which also
+         * replaces the per-category count query below: that was one extra
+         * Firestore read per category, and it counted products the customer
+         * cannot see. */
+        var visibleByCategory = {};
+
         await vendorProductsRef.get().then(async function(snapshots) {
             snapshots.docs.forEach((listval) => {
                 var datas = listval.data();
                 datas.id = listval.id;
-                if (inValidProductIds.length == 0 || !inValidProductIds.includes(datas.id)) {
-                    if (jQuery.inArray(datas.categoryID, vendorCategoryIds) == -1) {
-                        vendorCategoryIds.push(datas.categoryID);
-                    }
+
+                if (inValidProductIds.length != 0 && inValidProductIds.includes(datas.id)) {
+                    return;
                 }
+
+                if (hiddenWholesaleOnlyProduct(datas)) {
+                    return;
+                }
+
+                visibleByCategory[datas.categoryID] = (visibleByCategory[datas.categoryID] || 0) + 1;
             });
         });
+
+        var vendorCategoryIds = Object.keys(visibleByCategory);
         catsRef.get().then(async function(snapshots) {
             if (snapshots != undefined) {
                 var html = '';
@@ -188,10 +208,7 @@
                 });
                 var cats = [];
                 for (var i = 0; i < alldata.length; i++) {
-                    var countProduct = await vendorProductsRef.where('categoryID', '==', alldata[i].id).get().then(function(snapshots) {
-                        return snapshots.docs.length;
-                    });
-                    if (countProduct > 0) {
+                    if ((visibleByCategory[alldata[i].id] || 0) > 0) {
                         cats.push(alldata[i]);
                     }
                 }
@@ -280,10 +297,20 @@
         var html = '';
         vendorProductsRef.where('categoryID', '==', category_id).orderBy('name').get().then(async function(snapshots) {
             html = buildProductsHTML(snapshots);
-            if (html != '') {
-                product_list.innerHTML = html;
-                jQuery("#overlay").hide();
-            }
+
+            /* THE OVERLAY IS HIDDEN WHATEVER COMES BACK. buildProductsHTML
+             * returns '' for a category with nothing to draw, and hiding the
+             * spinner only when it returned something left it turning for
+             * ever. Latent until wholesale filtering made an empty category
+             * reachable - reported 30 Sep. */
+            product_list.innerHTML = html !== ''
+                ? html
+                : '<p class="text-center font-weight-bold mt-4 w-100">{{ trans('lang.no_results') }}</p>';
+
+            jQuery("#overlay").hide();
+        }).catch(function (error) {
+            console.error('products could not be listed', error);
+            jQuery("#overlay").hide();
         });
     }
     function buildProductsHTML(snapshots) {

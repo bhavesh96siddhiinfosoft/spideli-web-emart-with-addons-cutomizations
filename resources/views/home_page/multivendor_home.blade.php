@@ -1092,12 +1092,16 @@
         }
 
         async function catHaveProducts(categoryId) {
+            /* A CATEGORY HOLDING ONLY PRODUCTS THIS CUSTOMER CANNOT SEE IS NOT
+             * A CATEGORY THEY HAVE. Counting every product regardless put a
+             * tile on the home screen that opened onto nothing - the same
+             * fault reported against the store page on 30 Sep. */
+            await businessAccountReady;
+
             var response = database.collection('vendor_products').where("categoryID", "==", categoryId).get().then(function(CatProducts) {
-                if (CatProducts.docs.length > 0) {
-                    return true;
-                } else {
-                    return false;
-                }
+                return CatProducts.docs.some(function (doc) {
+                    return !hiddenWholesaleOnlyProduct(doc.data());
+                });
             });
             return response;
         }
