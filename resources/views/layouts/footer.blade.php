@@ -3807,6 +3807,62 @@
         };
     }
 
+    /* ---- A VARIANT'S LADDER ------------------------------------------------
+     *
+     * A variant carries ONE wholesale figure. The question is what it means.
+     *
+     * Read as "this variant's only wholesale price" it DESTROYS the ladder: a
+     * product with tiers at 10/50/150 charges the same per piece at 150 as at
+     * 10, which is not a tiered product at all. That is what a store sees when
+     * it adds sizes to a tiered product.
+     *
+     * So it is read as THIS VARIANT'S TIER-ONE PRICE. The product's tiers own
+     * the quantity breaks and the steps between them; the variant shifts the
+     * whole ladder to start at its own figure.
+     *
+     *     product   10 -> 949   50 -> 849   150 -> 749
+     *     variant entry 999  =>  999, 899, 799     (+50 throughout)
+     *     variant entry 949  =>  949, 849, 749     (unchanged)
+     *     variant blank      =>  the product's ladder as it stands
+     *
+     * One number per variant, which is all the panel and the app offer, and
+     * the ladder survives. A variant that happens to carry the product's own
+     * tier-one price - which is what a store enters when the sizes cost the
+     * same - comes out identical to the product, so existing data starts
+     * working without being re-entered.
+     *
+     * Steps are kept as DIFFERENCES, not ratios: a store setting 949/849/749
+     * means "a hundred rupees a step", and that is what it should stay when a
+     * size costs fifty more. A tier that would fall to zero or below is
+     * dropped rather than clamped - a ladder that deep says the figures are
+     * wrong, and silently inventing a price would hide it.
+     * ---------------------------------------------------------------------- */
+    function variantWholesaleTiers(tiers, variantEntryPrice) {
+        if (!Array.isArray(tiers) || tiers.length === 0) {
+            return [];
+        }
+
+        var entry = parseFloat(variantEntryPrice);
+        var base = parseFloat(tiers[0].price);
+
+        /* No figure of its own, or an unusable one: the product's ladder
+         * applies to this variant unchanged. */
+        if (isNaN(entry) || entry <= 0 || isNaN(base)) {
+            return tiers.slice();
+        }
+
+        return tiers
+            .map(function (tier) {
+                return {
+                    minQty: tier.minQty,
+                    price: entry + (parseFloat(tier.price) - base)
+                };
+            })
+            .filter(function (tier) {
+                return !isNaN(tier.price) && tier.price > 0;
+            });
+    }
+
     /* The tier a given quantity has reached, or null for none.
      *
      * The HIGHEST tier that the quantity meets wins, so the list is walked
@@ -3870,6 +3926,50 @@
      * wholesale-only product has one, and it is the ENTRY tier - the cheapest
      * quantity that unlocks a wholesale price, not the deepest. A store
      * selling in tens with a better price at fifty still sells tens. */
+    /* The headline price for a product that is sold ONLY in wholesale
+     * quantities, or '' when the ordinary retail price is the honest one.
+     *
+     * A wholesale-only product cannot be bought singly - the quantity box
+     * opens at the entry tier - so showing its retail price at the top of the
+     * page advertises a figure no customer can ever pay. The kurti read
+     * "Rs. 1,509" while the cheapest real purchase was ten pieces at Rs. 959.
+     *
+     * The entry TIER is what a buyer actually pays first, so that is what is
+     * shown. With variants it is a range, because each size starts its own
+     * ladder - the same reason the retail headline is a range. */
+    function wholesaleHeadlinePrice(finalPrice) {
+        if (!finalPrice
+            || !finalPrice.wholesaleEnabled
+            || finalPrice.saleType !== 'wholesale') {
+            return '';
+        }
+
+        var amounts = [];
+
+        if (finalPrice.wholesale_variants) {
+            amounts = Object.values(finalPrice.wholesale_variants)
+                .map(function (v) { return parseFloat(v); })
+                .filter(function (v) { return !isNaN(v) && v > 0; });
+        } else if (Array.isArray(finalPrice.wholesale_tiers) && finalPrice.wholesale_tiers.length > 0) {
+            amounts = [parseFloat(finalPrice.wholesale_tiers[0].price)];
+        } else if (finalPrice.wholesale_price !== null && finalPrice.wholesale_price !== undefined) {
+            amounts = [parseFloat(finalPrice.wholesale_price)];
+        }
+
+        amounts = amounts.filter(function (v) { return !isNaN(v) && v > 0; });
+
+        if (amounts.length === 0) {
+            return '';
+        }
+
+        var low = Math.min.apply(null, amounts);
+        var high = Math.max.apply(null, amounts);
+
+        return low === high
+            ? getProductFormattedPrice(low)
+            : getProductFormattedPrice(low) + ' - ' + getProductFormattedPrice(high);
+    }
+
     function minimumOrderQuantity(finalPrice) {
         if (!finalPrice || finalPrice.saleType !== 'wholesale' || !finalPrice.wholesaleEnabled) {
             return 1;

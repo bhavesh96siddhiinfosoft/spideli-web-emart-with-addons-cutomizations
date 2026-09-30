@@ -314,6 +314,21 @@
                 var variant_price = parseFloat(element.attr('data-vprice'));
                 var variant_qty = parseFloat(element.attr('data-vqty'));
                 if (quantity > variant_qty && variant_qty != -1) {
+                    /* Two different failures used to share one message. When
+                     * the option cannot make up a pack at all, "invalid stock
+                     * quantity" tells the customer nothing they can act on -
+                     * the quantity they see is the minimum, and lowering it is
+                     * not allowed. Name the option and the shortfall instead. */
+                    if (min_order_qty > 1 && variant_qty < min_order_qty) {
+                        Swal.fire({
+                            text: "{{ trans('lang.wholesale_variant_stock_short') }}"
+                                .replace(':stock', variant_qty)
+                                .replace(':count', min_order_qty),
+                            icon: "error"
+                        });
+                        return false;
+                    }
+
                     Swal.fire({text: "{{trans('lang.invalid_stock_qty')}}", icon: "error"});
                     return false;
                 }
@@ -333,13 +348,11 @@
                 if (variant_wholesale !== undefined && variant_wholesale !== '') {
                     wholesale_price = variant_wholesale;
 
-                    /* A variant carries ONE wholesale price, not a list, so the
-                     * product's tiers do not apply to it - they would charge a
-                     * price this variant never offered. It becomes the single
-                     * tier it is, kept at the product's entry quantity. */
-                    wholesale_tiers = wholesale_min_qty
-                        ? [{ minQty: parseInt(wholesale_min_qty) || 0, price: parseFloat(variant_wholesale) }]
-                        : [];
+                    /* The variant's figure is its TIER-ONE price, not its only
+                     * one. The product's ladder keeps its quantity breaks and
+                     * its steps; this shifts it to start where the variant
+                     * does. See variantWholesaleTiers() in the footer. */
+                    wholesale_tiers = variantWholesaleTiers(wholesale_tiers, variant_wholesale);
                 }
                 
             } else {
@@ -625,6 +638,50 @@
             : holder.innerHTML;
     }
 
+    /* The price to show for one size of a wholesale-only product: that size's
+     * ENTRY tier, with a line saying what it is.
+     *
+     * Returns the retail price it was given for anything else, so the ordinary
+     * path is untouched - a product sold at retail as well as wholesale really
+     * can be bought at its retail price, and that is the honest headline. */
+    function variantWholesaleHeadline(vendorProduct, variantId, retailFormatted) {
+        if (!final_price
+            || !final_price.wholesaleEnabled
+            || final_price.saleType !== 'wholesale'
+            || !final_price.wholesale_variants) {
+            return retailFormatted;
+        }
+
+        var entry = parseFloat(final_price.wholesale_variants[variantId]);
+
+        if (isNaN(entry) || entry <= 0) {
+            return retailFormatted;
+        }
+
+        return getProductFormattedPrice(entry) +
+            '<small class="d-block text-muted">' +
+            "{{ trans('lang.wholesale_per_unit_from') }}"
+                .replace(':count', minimumOrderQuantity(final_price)) +
+            '</small>';
+    }
+
+    /* The stock of the variant the customer has chosen, -1 for unlimited.
+     *
+     * -1 is also the answer when the product has no variants, or when none has
+     * been chosen yet: in both cases there is no per-variant limit to apply and
+     * the existing product-level checks still run. */
+    function selectedVariantStock(id) {
+        var element = $('#variation_info_' + id).find('#variant_price');
+
+        if (element.length === 0) {
+            return -1;
+        }
+
+        var stock = parseFloat(element.attr('data-vqty'));
+
+        return isNaN(stock) ? -1 : stock;
+    }
+
     /* The tier list this page put on the hidden input, back as an array.
      * Returns an empty list rather than throwing when there is nothing there,
      * which is the normal case for a product with no wholesale pricing. */
@@ -667,15 +724,12 @@
 
         var tiers = readWholesaleTiers(id);
 
-        /* A chosen variant's own wholesale price wins over the product's, and
-         * replaces the tier list with itself - a variant has one price, not a
-         * ladder. Same resolution as the cart. */
+        /* A chosen variant shifts the ladder to start at its own figure rather
+         * than replacing it. Same resolution as the cart, so the note and the
+         * price charged cannot disagree. */
         var variantPrice = $('#variation_info_' + id).find('#variant_price').attr('data-vwprice');
         if (variantPrice !== undefined && variantPrice !== '') {
-            var entryQty = parseInt($('#wholesale_min_qty_' + id).val() || 0) || 0;
-            tiers = entryQty > 0
-                ? [{ minQty: entryQty, price: parseFloat(variantPrice) }]
-                : [];
+            tiers = variantWholesaleTiers(tiers, variantPrice);
         }
 
         if (tiers.length === 0) {
@@ -704,6 +758,32 @@
         /* Sold in packs - said plainly, because the quantity box silently
          * starting at ten is otherwise just odd. */
         var minimum = parseInt($('#min_order_qty_' + id).val() || 1) || 1;
+
+        /* THE OPTION THE CUSTOMER PICKED CANNOT MAKE UP A PACK.
+         *
+         * A wholesale-only product opens its quantity box at the entry tier.
+         * If the chosen size has less than that left, every route out is a
+         * dead end - the box cannot go lower and the stock cannot go higher -
+         * and add-to-cart would have failed with "invalid stock quantity",
+         * which says nothing about why.
+         *
+         * Say which option is short and by how much, and shut the buttons
+         * rather than letting them press on into an error. */
+        var variantStock = selectedVariantStock(id);
+        var buttons = $(".add-to-cart[data-id='" + id + "']");
+
+        if (minimum > 1 && variantStock !== -1 && variantStock < minimum) {
+            holder.html('<span class="badge badge-danger p-2">' +
+                "{{ trans('lang.wholesale_variant_stock_short') }}"
+                    .replace(':stock', variantStock)
+                    .replace(':count', minimum) +
+                '</span>');
+            buttons.prop('disabled', true).addClass('disabled');
+            return;
+        }
+
+        buttons.prop('disabled', false).removeClass('disabled');
+
         if (minimum > 1) {
             html += '<span class="badge badge-dark p-2">' +
                 "{{ trans('lang.wholesale_only_minimum') }}".replace(':count', minimum) +
@@ -720,6 +800,13 @@
         /* The step up, whether or not a tier is already running - a customer on
          * the 15 tier should still be told what 100 would cost. Skipped when
          * the next tier is not actually cheaper than what they pay now. */
+        /* A tier the chosen option cannot physically reach is not an offer.
+         * Sixty left in this size and a tier at 150 - saying "add 90 more"
+         * invites the customer into a stock error. */
+        if (next && variantStock !== -1 && next.minQty > variantStock) {
+            next = null;
+        }
+
         if (next && (!applied || parseFloat(next.price) < parseFloat(applied.price))) {
             var remaining = next.minQty - quantity;
             html += (html === '' ? '' : ' ') +
@@ -1384,7 +1471,23 @@
                 html = html + '</div>';
                 html = html + '</span>';
             } else {
-                if (vendorProduct.hasOwnProperty('disPrice') && vendorProduct.disPrice != '' && vendorProduct.disPrice != '0' && vendorProduct.item_attribute == null) {
+                /* SOLD ONLY IN WHOLESALE QUANTITIES: show what a buyer actually
+                 * pays first, not a retail price nobody can reach.
+                 *
+                 * This product cannot be bought singly - the quantity box opens
+                 * at the entry tier - so the retail figure at the top of the
+                 * page was advertising a price no customer could ever pay. The
+                 * kurti read Rs. 1,509 while the cheapest real purchase was ten
+                 * pieces at Rs. 959 each. */
+                var wholesale_headline = wholesaleHeadlinePrice(final_price);
+
+                if (wholesale_headline !== '') {
+                    html = html + '<span class="price">' + wholesale_headline +
+                        '<small class="d-block text-muted">' +
+                        "{{ trans('lang.wholesale_per_unit_from') }}"
+                            .replace(':count', minimumOrderQuantity(final_price)) +
+                        '</small></span>';
+                } else if (vendorProduct.hasOwnProperty('disPrice') && vendorProduct.disPrice != '' && vendorProduct.disPrice != '0' && vendorProduct.item_attribute == null) {
                     var or_price = getProductFormattedPrice(parseFloat(final_price.price));
 				    var dis_price = getProductFormattedPrice(parseFloat(final_price.dis_price));
                     html = html + '<span class="price">' + dis_price + '  <s>' + or_price + '</s></span>';
@@ -1855,6 +1958,16 @@
                 } else {
                     var pro_price = currentCurrency + "" + variant_price.toFixed(decimal_degits);
                 }
+
+                /* SOLD ONLY IN WHOLESALE QUANTITIES: show what this size
+                 * actually costs, not a retail price nobody can pay.
+                 *
+                 * The quantity box opens at the entry tier, so a single piece
+                 * is not for sale at any price. Showing the retail figure was
+                 * advertising Rs. 1,509 for a kurti whose cheapest real
+                 * purchase is ten pieces at Rs. 959 each. */
+                pro_price = variantWholesaleHeadline(vendorProduct, variant_id, pro_price);
+
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').html(pro_price);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vid', variant_id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vprice', variant_price);
@@ -1931,6 +2044,16 @@
                 } else {
                     var pro_price = currentCurrency + "" + variant_price.toFixed(decimal_degits);
                 }
+
+                /* SOLD ONLY IN WHOLESALE QUANTITIES: show what this size
+                 * actually costs, not a retail price nobody can pay.
+                 *
+                 * The quantity box opens at the entry tier, so a single piece
+                 * is not for sale at any price. Showing the retail figure was
+                 * advertising Rs. 1,509 for a kurti whose cheapest real
+                 * purchase is ten pieces at Rs. 959 each. */
+                pro_price = variantWholesaleHeadline(vendorProduct, variant_id, pro_price);
+
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').html(pro_price);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vid', variant_id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vprice', variant_price);

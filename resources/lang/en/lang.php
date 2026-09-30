@@ -949,6 +949,8 @@ return [
     'wholesale_add_more' => 'add :count more',
     'wholesale_details' => 'Wholesale details',
     'wholesale_only_minimum' => 'Sold in a minimum of :count units',
+    'wholesale_per_unit_from' => 'per piece, from :count units',
+    'wholesale_variant_stock_short' => 'Only :stock left in this option, and it is sold in a minimum of :count. Please choose another.',
     'receipt_scan_to_track' => 'Scan to track this parcel',
     'parcel_tracking_title' => 'Track your parcel',
     'parcel_tracking_not_found' => 'We could not find that parcel',
