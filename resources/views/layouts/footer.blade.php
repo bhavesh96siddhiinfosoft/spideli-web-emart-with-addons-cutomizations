@@ -3442,6 +3442,88 @@
         }
     }
 
+    /* ---- May this customer see wholesale at all? -------------------------
+     *
+     * Settled with the client on 30 September: WHOLESALE IS FOR APPROVED
+     * BUSINESS ACCOUNTS. A customer without one sees the shop without it -
+     * no bulk prices, no tier ladder, and no wholesale-only products.
+     *
+     * "Approved" is the admin panel's decision, not the customer's request:
+     * accountType "business" AND businessProfile.status "approved"
+     * (APP-SPEC-ADMIN.md 18). A pending or refused application buys nothing.
+     *
+     * FAILING CLOSED IS DELIBERATE. A read that errors, or a visitor who is
+     * signed out, gets RETAIL. Withholding a discount from someone entitled
+     * to it is a support call; handing it to everyone when Firestore hiccups
+     * is the client's margin.
+     *
+     * !! THIS IS A BUSINESS RULE, NOT A SECURITY BOUNDARY. This panel posts
+     * prices from the browser to the cart controller, so the server re-checks
+     * the same rule in ProductController. And until Firestore rules land, a
+     * customer can still write businessProfile.status themselves - see
+     * APP-SPEC-WEB.md 19.
+     * -------------------------------------------------------------------- */
+
+    var customerMayBuyWholesale = false;
+
+    async function loadBusinessAccountStatus() {
+        if (typeof cuser_id === 'undefined' || cuser_id === '') {
+            return false;
+        }
+
+        try {
+            var snapshot = await database.collection('users').doc(cuser_id).get();
+
+            if (!snapshot.exists) {
+                return false;
+            }
+
+            var user = snapshot.data() || {};
+            var profile = user.businessProfile || {};
+
+            customerMayBuyWholesale = user.accountType === 'business' && profile.status === 'approved';
+        } catch (err) {
+            console.error('business account status could not be read; wholesale withheld', err);
+            customerMayBuyWholesale = false;
+        }
+
+        return customerMayBuyWholesale;
+    }
+
+    /* Started immediately, awaited once inside processVendorData, the same
+     * shape discoveryRegionsReady uses. */
+    var businessAccountReady = loadBusinessAccountStatus();
+
+    /* A wholesale-ONLY product this customer may not buy.
+     *
+     * READS THE RAW PRODUCT, not the computed price object, on purpose:
+     * fetchVendorPriceData() returns {} outright when adminCommissionSettings
+     * is missing from localStorage - which happens whenever the section cookie
+     * points at a section that no longer exists. Keying this on the price
+     * object would then hide nothing and leak every wholesale-only product.
+     * saleType and wholesaleEnabled are on the product document itself, so
+     * this holds whatever state the pricing is in.
+     *
+     * Listings FILTER THE ARRAY before drawing rather than skipping inside the
+     * loop, so "everything was hidden" falls through to the screen's own empty
+     * message instead of leaving a blank row - and so the row-opening
+     * count == 1 logic several screens use still fires on the first card
+     * actually drawn. */
+    function hiddenWholesaleOnlyProduct(product) {
+        return !!(product
+            && product.wholesaleEnabled === true
+            && String(product.saleType || '').toLowerCase() === 'wholesale'
+            && !customerMayBuyWholesale);
+    }
+
+    /* Drops the products this customer may not see. Screens await
+     * businessAccountReady before calling it. */
+    function withoutHiddenWholesale(products) {
+        return Array.isArray(products)
+            ? products.filter(function (product) { return !hiddenWholesaleOnlyProduct(product); })
+            : products;
+    }
+
     async function fetchVendorPriceData() {
         let priceData = {}; // To store price data for each vendor
         let adminCommissionSettings = localStorage.getItem('adminCommissionSettings');
@@ -3567,8 +3649,25 @@
          *
          * Added after the branches above, not inside them, because
          * final_price is reassigned wholesale in several of them. */
-        final_price.wholesaleEnabled = productData.wholesaleEnabled === true;
+        await businessAccountReady;
+
+        /* THE SINGLE SWITCH. Everything downstream - the badge, the tier
+         * ladder, the minimum quantity, the price actually charged - is
+         * already gated on wholesaleEnabled, so withholding it here withholds
+         * wholesale everywhere at once rather than in seven screens. */
+        final_price.wholesaleEnabled = productData.wholesaleEnabled === true && customerMayBuyWholesale;
         final_price.wholesaleMinQty = parseInt(productData.wholesaleMinQty || 0) || 0;
+
+        /* The same verdict as hiddenWholesaleOnlyProduct(), carried on the
+         * price object for the ONE screen that cannot use that function:
+         * favourites renders a placeholder card per favourite record and fills
+         * it in afterwards, so the product document is not in hand at the
+         * moment the card is drawn. Everywhere else prefers the raw product,
+         * which survives an empty priceData. */
+        final_price.wholesaleOnlyHidden = productData.wholesaleEnabled === true
+            && String(productData.saleType || '').toLowerCase() === 'wholesale'
+            && !customerMayBuyWholesale;
+
 
         /* The store's three-way choice: "retail", "wholesale" (sold ONLY in
          * wholesale quantities) or "both". Anything else, including a product

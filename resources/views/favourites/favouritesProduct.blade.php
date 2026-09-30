@@ -47,6 +47,9 @@
         append_list = document.getElementById('append_list1');
         append_list.innerHTML = '';
         priceData = await fetchVendorPriceData();
+        /* Whether this customer may see wholesale at all - awaited before any
+         * card is drawn, because the filter below depends on the answer. */
+        await businessAccountReady;
         inValidVendors = await getInvaidUserIds();
         ref.limit(pagesize).get().then(async function(snapshots) {
             if (snapshots != undefined) {
@@ -80,7 +83,15 @@
             datas.id = listval.id;
             var isInZone=await checkInZone(datas.store_id);
             inValidProductIds = await getUserItemLimit(datas.store_id);
-            if (isInZone && ( inValidProductIds.length === 0 || !inValidProductIds.includes(datas.product_id) )) {
+            /* A favourite may point at a wholesale-only product this customer
+             * may no longer see - they could have favourited it while their
+             * business account was approved. Judged from the price object
+             * because this screen has only the favourite record here; the
+             * product document is fetched later, card by card. */
+            var favPrice = priceData ? priceData[datas.product_id] : null;
+            var hiddenForCustomer = !!(favPrice && favPrice.wholesaleOnlyHidden);
+
+            if (!hiddenForCustomer && isInZone && ( inValidProductIds.length === 0 || !inValidProductIds.includes(datas.product_id) )) {
                 alldata.push(datas);
             }
         }));

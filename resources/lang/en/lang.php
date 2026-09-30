@@ -1033,5 +1033,7 @@ return [
     'payment_methods_save_failed' => 'That could not be saved. Please check your connection and try again.',
     'payment_methods_read_failed' => 'Your saved payment methods could not be loaded. Please try again.',
     'payment_methods_no_cards' => 'We never store card details. Only mobile money numbers are saved here.',
+    'wholesale_business_only_title' => 'This item is for business accounts',
+    'wholesale_business_only' => 'This item is sold to approved business accounts only. Apply for a business account to buy it.',
 ];
 

@@ -147,6 +147,9 @@
      $(document).ready(async function() {
         inValidProductIds = await getUserItemLimit(vendorID);
         priceData = await fetchVendorPriceData();
+        /* Whether this customer may see wholesale at all - awaited before any
+         * card is drawn, because the filter below depends on the answer. */
+        await businessAccountReady;
         getVendorDetails();
         getCategories();
         $(document).on("click", ".category-item", function() {
@@ -299,6 +302,9 @@
                 }
             }
         });
+
+        alldata = withoutHiddenWholesale(alldata);
+
         var count = 0;
         var popularFoodCount = 0;
         if (alldata.length > 0) {

@@ -115,6 +115,19 @@ class ProductController extends Controller
         $cart['deliveryCharge'] = ($cart['delivery_option'] === 'delivery' && !$selfDelivery) ? $cart['deliverychargemain'] : 0;
         $cart['tip_amount'] = 0;
 
+        /* A WHOLESALE-ONLY PRODUCT IS HIDDEN from a customer without an
+         * approved business account, so one arriving here is a stale page or a
+         * hand-made request. Refused outright: selling it at retail in ones
+         * would contradict the store, and raising it to the pack minimum would
+         * hand that customer a basket of fifty. */
+        if ($this->isBlockedWholesaleOnly($req['sale_type'] ?? null)) {
+            echo json_encode([
+                'status' => false,
+                'message' => trans('lang.wholesale_business_only')
+            ]);
+            exit;
+        }
+
         // Add item
         if (isset($req['variant_info']) && !empty($req['variant_info']['variant_id'])) {
             $id = $id . 'PV' . $req['variant_info']['variant_id'];
@@ -379,6 +392,22 @@ class ProductController extends Controller
         $retail = $item['retail_base_price'] ?? $item['item_price'];
         $item['retail_base_price'] = $retail;
 
+        /* WHOLESALE IS FOR APPROVED BUSINESS ACCOUNTS (client, 30 Sep).
+         *
+         * Checked HERE rather than trusting the browser to leave the tiers
+         * out, because this is where the line is priced and the tiers arrive
+         * in the request. Everything below is skipped, so the line is charged
+         * retail and records no applied tier. */
+        if (!static::isApprovedBusinessCustomer()) {
+            $item['wholesale_tiers'] = [];
+            $item['is_wholesale'] = false;
+            $item['item_price'] = $retail;
+            $item['wholesale_applied_min_qty'] = '';
+            $item['wholesale_applied_price'] = '';
+
+            return $item;
+        }
+
         $tiers = $this->normaliseWholesaleTiers($item['wholesale_tiers'] ?? []);
 
         /* Nothing but the older pair - treat it as the one tier it is. */
@@ -458,9 +487,33 @@ class ProductController extends Controller
 
     private function enforceSaleTypeQuantity(array $item, $quantity)
     {
+        /* A wholesale-only product has no pack minimum for someone who may not
+         * buy wholesale, because they may not buy it AT ALL - it is hidden
+         * from them. Forcing the pack minimum here would be the one way such a
+         * customer could end up with a basket of fifty. */
+        if (!static::isApprovedBusinessCustomer()) {
+            return $quantity;
+        }
+
         $minimum = $this->saleTypeMinimum($item);
 
         return $quantity < $minimum ? $minimum : $quantity;
+    }
+
+    /**
+     * Whether this line is a product sold ONLY in wholesale quantities.
+     *
+     * Such a product is hidden from a customer without an approved business
+     * account, so one arriving in an add-to-cart request is either a stale
+     * page or a hand-made request. Either way it is refused rather than
+     * quietly sold at retail in ones - the store said it is sold in packs, and
+     * that does not stop being true because the shopper has no business
+     * account.
+     */
+    private function isBlockedWholesaleOnly($saleType)
+    {
+        return $this->normaliseSaleType($saleType) === 'wholesale'
+            && !static::isApprovedBusinessCustomer();
     }
 
     public function distance($lat1, $lon1, $lat2, $lon2, $unit)

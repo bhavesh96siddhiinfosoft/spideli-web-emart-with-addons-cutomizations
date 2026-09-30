@@ -430,6 +430,15 @@
                 dataType: 'json',
                 data: JSON.stringify(payload),
                 success: function (data) {
+                    /* The cart controller refuses a wholesale-only product for
+                     * a customer with no approved business account. Without
+                     * this the refusal - which carries no html - would blank
+                     * the cart panel and still say "added to cart". */
+                    if (data && data.status === false) {
+                        Swal.fire({ text: data.message || "{{ trans('lang.wholesale_business_only') }}", icon: "error" });
+                        return;
+                    }
+
                     $('#cart_list').html(data.html);
                     loadcurrency();
                     $('#close_' + id).trigger("click");
@@ -1267,6 +1276,30 @@
     /* Add to favorite code Ends */
     async function buildHTML(snapshots) {
         var vendorProduct = snapshots.data();
+
+        /* A WHOLESALE-ONLY PRODUCT IS NOT FOR THIS CUSTOMER. It is filtered
+         * out of every listing, but a direct link, a bookmark or a shared URL
+         * reaches this page anyway, so the page has to refuse on its own.
+         *
+         * Nothing else on the screen is drawn - no price, no quantity box, no
+         * add-to-cart - because the whole of it describes a sale that cannot
+         * happen. The customer is told why and pointed at the application,
+         * which is the one useful thing to say to someone who wants the
+         * product. */
+        await businessAccountReady;
+
+        if (hiddenWholesaleOnlyProduct(vendorProduct)) {
+            /* RETURNED, not injected - the caller owns the container and runs
+             * its own cleanup after this. */
+            return '<div class="col-12"><div class="p-5 rounded shadow-sm bg-white text-center">' +
+                '<i class="fa fa-briefcase h3 text-muted mb-3 d-block"></i>' +
+                '<h5 class="font-weight-bold mb-2">' + "{{ trans('lang.wholesale_business_only_title') }}" + '</h5>' +
+                '<p class="text-muted mb-4">' + "{{ trans('lang.wholesale_business_only') }}" + '</p>' +
+                '<a href="{{ route('business_account') }}" class="btn btn-primary">' +
+                "{{ trans('lang.business_account_title') }}" + '</a>' +
+                '</div></div>';
+        }
+
         if (vendorProduct != undefined) {
             var vendorID = vendorProduct.vendorID;
             var productID = vendorProduct.id;

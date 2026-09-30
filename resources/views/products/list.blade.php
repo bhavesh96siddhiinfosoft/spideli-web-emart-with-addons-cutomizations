@@ -71,6 +71,9 @@
         /* The render loops below test each store synchronously. */
         await discoveryRegionsReady;
         priceData=await fetchVendorPriceData();
+        /* Whether this customer may see wholesale at all - awaited before any
+         * card is drawn, because the filter below depends on the answer. */
+        await businessAccountReady;
 
         if (type == "category") {
             getCategories();
@@ -254,6 +257,8 @@
             alldata=alldata.concat(products);
         }));
        
+        alldata = withoutHiddenWholesale(alldata);
+
         var count = 0;
         var popularFoodCount = 0;
         if (alldata.length) {

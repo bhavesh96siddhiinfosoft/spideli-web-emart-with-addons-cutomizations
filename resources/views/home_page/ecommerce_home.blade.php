@@ -433,6 +433,9 @@
             address_lat = parseFloat(address_lat);
             address_lng = parseFloat(address_lng);
             priceData = await fetchVendorPriceData();
+            /* Whether this customer may see wholesale at all - awaited before any
+             * card is drawn, because the filter below depends on the answer. */
+            await businessAccountReady;
             myStopTimer();
             getMostPopularStores();
             getMostSalesStore();
@@ -759,6 +762,9 @@
                 products = products.filter(product => !inValidProductIds.includes(product.id));
                 alldata = alldata.concat(products);
             }));
+
+            alldata = withoutHiddenWholesale(alldata);
+
             var count = 0;
             var popularFoodCount = 0;
             html = html + '<div class="row">';

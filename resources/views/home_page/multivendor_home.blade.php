@@ -369,6 +369,9 @@
             jQuery("#overlay").show();
             inValidVendors = await getInvaidUserIds();
             priceData = await fetchVendorPriceData();
+            /* Whether this customer may see wholesale at all - awaited before any
+             * card is drawn, because the filter below depends on the answer. */
+            await businessAccountReady;
             myInterval = setInterval(callStore, 1000);
         });
 
@@ -1006,6 +1009,8 @@
                 alldata = alldata.concat(products);
             }));
             html = html + '<div class="row">';
+            alldata = withoutHiddenWholesale(alldata);
+
             await Promise.all(alldata.map(async (listval) => {
 
                 var val = listval;

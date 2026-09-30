@@ -140,6 +140,9 @@
         /* The render loops below test each store synchronously. */
         await discoveryRegionsReady;
         priceData = await fetchVendorPriceData();
+        /* Whether this customer may see wholesale at all - awaited before any
+         * card is drawn, because the filter below depends on the answer. */
+        await businessAccountReady;
         await getProductList();
         getVendorList();
         getResults();
@@ -316,6 +319,8 @@
         return html;
     }
     function buildProductHTML(allProductdata) {
+        allProductdata = withoutHiddenWholesale(allProductdata);
+
         var html = '';
         var count = 0;
         var productCount = 0;
