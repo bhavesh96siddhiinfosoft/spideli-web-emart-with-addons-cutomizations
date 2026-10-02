@@ -852,15 +852,9 @@
                 }
                 $("#billing_name").text(billingName);
                 var billingAddressstring = '';
-                if (orderDetails.address.hasOwnProperty('address')) {
-                    $("#billing_line1").text(orderDetails.address.address);
-                }
-                if (orderDetails.address.hasOwnProperty('locality')) {
-                    billingAddressstring = billingAddressstring + orderDetails.address.locality;
-                }
-                if (orderDetails.address.hasOwnProperty('landmark') && orderDetails.address.landmark != null && orderDetails.address.landmark != '') {
-                    billingAddressstring = billingAddressstring + " " + orderDetails.address.landmark;
-                }
+                /* 02#18 - see layouts/footer.blade.php for the rule. */
+                $("#billing_line1").text(spideliCleanAddressPart(orderDetails.address && orderDetails.address.address));
+                billingAddressstring = spideliFormatAddress(orderDetails.address, ['locality', 'landmark']);
                 if (orderDetails.takeAway == true) {
                     billingAddressstring = '';
                     $('#billing_adrs').hide();

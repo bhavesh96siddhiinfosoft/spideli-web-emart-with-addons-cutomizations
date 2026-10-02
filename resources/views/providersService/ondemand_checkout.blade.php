@@ -612,16 +612,16 @@
                 shippingAddress.forEach((listval) => {
                     if (sessionAdrsId != '' && sessionAdrsId != null) {
                         if (listval.id == sessionAdrsId) {
-                            $("#line_1").html(listval.address);
-                            $('#line_2').html(listval.locality + " " + listval.landmark);
+                            $("#line_1").html(spideliCleanAddressPart(listval.address));
+                            $('#line_2').html(spideliFormatAddress(listval, ['locality', 'landmark']));
                             $('#addressId').val(listval.id);
                             $("#address_box").show();
                             isShipping = true;
                         }
                     } else {
                         if (listval.isDefault == true) {
-                            $("#line_1").html(listval.address);
-                            $('#line_2').html(listval.locality + " " + listval.landmark);
+                            $("#line_1").html(spideliCleanAddressPart(listval.address));
+                            $('#line_2').html(spideliFormatAddress(listval, ['locality', 'landmark']));
                             $('#addressId').val(listval.id);
                             $("#address_box").show();
                             isShipping = true;
