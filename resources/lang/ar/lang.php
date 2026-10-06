@@ -840,5 +840,28 @@ return [
     'click_here_to_request_another' => 'اضغط هنا لطلب واحد آخر',
     'dine_in_restaurants' => 'مطاعم تناول الطعام داخل المطعم',
     'type_comment' => 'اكتب تعليق...',
-];
+    /* Order history. The September work (the free limit and the period
+       picker) added English only, so every one of these was showing its key
+       name in Arabic. Added with 02#54 rather than left half-translated. */
+    'order_history_limited' => 'أنت ترى آخر :count طلبات. اشترك لرؤية طلباتك الأقدم.',
+    'order_history_see_all' => 'عرض السجل الكامل',
+    'order_history_period' => 'عرض الطلبات من',
+    'order_history_period_all' => 'كل الأوقات',
+    'order_history_period_custom' => 'اختر التواريخ...',
+    'order_history_period_apply' => 'تطبيق',
+    'order_history_period_showing' => 'المعروض: :period',
+    'order_history_period_pick_dates' => 'يرجى اختيار تاريخ البداية أو تاريخ النهاية أو كليهما.',
+    'order_history_period_bad_range' => 'تاريخ البداية بعد تاريخ النهاية.',
 
+    /* 02#54: printing the order history for a period. */
+    'order_history_print' => 'طباعة',
+    'order_history_print_title' => 'سجل الطلبات',
+    'order_history_print_customer' => 'العميل',
+    'order_history_print_period' => 'الفترة',
+    'order_history_print_generated' => 'تمت الطباعة في',
+    'order_history_print_completed' => 'الطلبات المكتملة',
+    'order_history_print_progress' => 'الطلبات قيد التنفيذ',
+    'order_history_print_canceled' => 'الطلبات الملغاة',
+    'order_history_print_rejected' => 'الطلبات المرفوضة',
+    'order_history_print_none' => 'لا توجد طلبات في هذه الفترة.',
+];

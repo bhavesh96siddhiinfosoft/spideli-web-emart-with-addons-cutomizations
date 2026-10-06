@@ -939,6 +939,18 @@ return [
     'order_history_period_showing' => 'Showing: :period',
     'order_history_period_pick_dates' => 'Please choose a start date, an end date, or both.',
     'order_history_period_bad_range' => 'The start date is after the end date.',
+
+    /* 02#54: printing the order history for a period. */
+    'order_history_print' => 'Print',
+    'order_history_print_title' => 'Order history',
+    'order_history_print_customer' => 'Customer',
+    'order_history_print_period' => 'Period',
+    'order_history_print_generated' => 'Printed on',
+    'order_history_print_completed' => 'Completed orders',
+    'order_history_print_progress' => 'Orders in progress',
+    'order_history_print_canceled' => 'Cancelled orders',
+    'order_history_print_rejected' => 'Rejected orders',
+    'order_history_print_none' => 'No orders in this period.',
     'service_coming_soon_title' => 'Coming soon',
     'service_coming_soon_text' => 'This service is on its way to Spideli. It is not open yet - please choose another service for now.',
     'service_coming_soon_choose' => 'Choose another service',

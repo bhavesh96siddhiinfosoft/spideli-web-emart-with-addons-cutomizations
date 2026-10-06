@@ -42,6 +42,16 @@
                             <button type="button" id="order_period_apply" class="btn btn-primary btn-sm">{{ trans('lang.order_history_period_apply') }}</button>
                         </div>
                         <span id="order_period_summary" class="text-muted small ml-auto"></span>
+                        {{-- 02#54: printing lives in this bar on purpose. The
+                             bar is shown only to a customer whose plan carries
+                             full order history, so the client's condition -
+                             "only users with an active subscription to the
+                             order history should have access" - is satisfied
+                             by where the button sits, not by a second check
+                             that could drift away from the first. --}}
+                        <button type="button" id="order_history_print" class="btn btn-outline-primary btn-sm ml-2">
+                            <i class="feather-printer mr-1"></i>{{ trans('lang.order_history_print') }}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -65,23 +75,37 @@
                     </li>
                 </ul>
             </div>
+            {{-- Shown only on paper. Without it a printout is a list of
+                 orders with nothing saying whose they are or what period was
+                 asked for. --}}
+            <div class="col-md-12 order-print-only" id="order_history_print_header">
+                <h4 class="mb-1">{{ trans('lang.order_history_print_title') }}</h4>
+                <p class="mb-0 small"><strong>{{ trans('lang.order_history_print_customer') }}:</strong> <span id="print_customer"></span></p>
+                <p class="mb-0 small"><strong>{{ trans('lang.order_history_print_period') }}:</strong> <span id="print_period"></span></p>
+                <p class="mb-3 small"><strong>{{ trans('lang.order_history_print_generated') }}:</strong> <span id="print_generated"></span></p>
+            </div>
+
             <div class="tab-content col-md-12" id="myTabContent">
                 <div class="tab-pane fade show active" id="completed" role="tabpanel" aria-labelledby="completed-tab">
+                    <h5 class="order-print-only mt-3">{{ trans('lang.order_history_print_completed') }}</h5>
                     <div class="order-body">
                         <div id="completed_orders"></div>
                     </div>
                 </div>
                 <div class="tab-pane fade" id="progress" role="tabpanel" aria-labelledby="progress-tab">
+                    <h5 class="order-print-only mt-3">{{ trans('lang.order_history_print_progress') }}</h5>
                     <div class="order-body">
                         <div id="pending_orders"></div>
                     </div>
                 </div>
                 <div class="tab-pane fade" id="canceled" role="tabpanel" aria-labelledby="canceled-tab">
+                    <h5 class="order-print-only mt-3">{{ trans('lang.order_history_print_canceled') }}</h5>
                     <div class="order-body">
                         <div id="canceled_orders"></div>
                     </div>
                 </div>
                 <div class="tab-pane fade" id="rejected" role="tabpanel" aria-labelledby="rejected-tab">
+                    <h5 class="order-print-only mt-3">{{ trans('lang.order_history_print_rejected') }}</h5>
                     <div class="order-body">
                         <div id="rejected_orders"></div>
                     </div>
@@ -90,6 +114,64 @@
         </div>
     </div>
 </section>
+
+{{-- 02#54: the printed order history.
+     Printing what is ALREADY ON SCREEN, rather than rebuilding the orders
+     into a separate document. Every total on an order card is worked out in
+     buildHTML*Orders - taxes by scope, discounts, packaging, platform fee,
+     tips, per-region currency. Recomputing that for paper would be a second
+     implementation of the same sums, and the day the two disagree the
+     customer is holding the wrong one.
+
+     All four tabs print, not just the open one: the client asked for the
+     orders history for a period, and the period is not a status. All four
+     panes are already built and in the page - the tab CSS merely hides three
+     of them - so revealing them for print costs nothing and cannot disagree
+     with the screen. --}}
+<style>
+    .order-print-only { display: none; }
+
+    @media print {
+        /* Site chrome has no place on a statement. */
+        header, nav, footer, .navbar, .main-header, .footer,
+        #order_period_bar, #order_history_notice, .top-nav,
+        .breadcrumb, .btn, .view-det, .ord-com-btn .btn,
+        #overlay, .modal, .osahan-menu, .sticky-bar { display: none !important; }
+
+        .order-print-only { display: block !important; }
+
+        /* Every tab, not only the open one. Bootstrap hides the other three
+           with .fade/.active; print needs all four. */
+        .tab-content > .tab-pane { display: block !important; opacity: 1 !important; }
+        .tab-pane.fade { opacity: 1 !important; }
+
+        /* Cards are for a screen: drop the lift and keep the rules, which
+           are what makes a long list readable on paper. */
+        .shadow-sm, .shadow { box-shadow: none !important; }
+        .bg-white { background: #fff !important; }
+        .rounded { border-radius: 0 !important; }
+        .p-3 { padding: .4rem 0 !important; }
+        .pb-3 { padding-bottom: .4rem !important; }
+
+        /* An order must not be split across two sheets. */
+        .order-body > div > .pb-3 { page-break-inside: avoid; }
+        h5.order-print-only { page-break-after: avoid; }
+
+        /* Thumbnails waste ink and tell the reader nothing. */
+        .order_img { display: none !important; }
+
+        body { background: #fff !important; font-size: 11pt; }
+        a { text-decoration: none !important; color: #000 !important; }
+
+        /* A status reads as a word on paper; the colour block does not. */
+        .bg-success, .bg-danger, .bg-warning, .bg-info {
+            background: none !important;
+            color: #000 !important;
+            font-weight: 700;
+            padding: 0 !important;
+        }
+    }
+</style>
 
 @include('layouts.footer')
 @include('layouts.nav')
@@ -363,11 +445,70 @@
         return true;
     }
 
+    /* Kept so the printed sheet can say which period it covers. Reading it
+     * back out of the summary span would mean unpicking the "Showing: X"
+     * wrapper, and that wrapper is translated. */
+    var orderPeriodLabel = '';
+
     function setOrderPeriodSummary(label) {
+        orderPeriodLabel = label || '';
         $('#order_period_summary').text(label
             ? "{{ trans('lang.order_history_period_showing') }}".replace(':period', label)
             : '');
     }
+
+    /* ---- 02#54: print the order history for the chosen period ----
+     *
+     * Asked for across every app; this is the customer website's share. The
+     * client's condition - "only users with an active subscription to the
+     * order history should have access" - is met by WHERE THE BUTTON LIVES:
+     * inside #order_period_bar, which initOrderPeriod() shows only when
+     * hasFullOrderHistory() is true. One gate, not two that can drift.
+     *
+     * The sheet is the page itself under a print stylesheet, so every total
+     * on it is the one the customer is already looking at. */
+    function orderHistoryPrintName() {
+        if (!orderSnapshots || !orderSnapshots.docs.length) {
+            return '';
+        }
+
+        /* Taken from an order rather than re-read: the author is embedded in
+         * every one, and these are this customer's own orders. */
+        var author = (orderSnapshots.docs[0].data() || {}).author || {};
+        var name = ((author.firstName || '') + ' ' + (author.lastName || '')).trim();
+        return name;
+    }
+
+    function orderHistoryPrintedOrderCount() {
+        /* What is actually on the page, after the period filter and the free
+         * allowance - not what came back from Firestore. */
+        return $('#completed_orders, #pending_orders, #canceled_orders, #rejected_orders')
+            .children().length;
+    }
+
+    $(document).on('click', '#order_history_print', function () {
+        var name = orderHistoryPrintName();
+        $('#print_customer').text(name !== '' ? name : '-');
+        $('#print_period').text(orderPeriodLabel !== ''
+            ? orderPeriodLabel
+            : "{{ trans('lang.order_history_period_all') }}");
+
+        var now = new Date();
+        $('#print_generated').text(now.toDateString() + ' ' + now.toLocaleTimeString());
+
+        /* An empty period must print as a sheet that SAYS it is empty. A
+         * blank page reads as a failed print, and the customer tries again. */
+        $('#order_history_print_empty').remove();
+        if (orderHistoryPrintedOrderCount() === 0) {
+            $('#order_history_print_header').append(
+                $('<p>').attr('id', 'order_history_print_empty')
+                        .addClass('order-print-only')
+                        .text("{{ trans('lang.order_history_print_none') }}")
+            );
+        }
+
+        window.print();
+    });
 
     $(document).on('change', '#order_period', function () {
         var value = $(this).val();
