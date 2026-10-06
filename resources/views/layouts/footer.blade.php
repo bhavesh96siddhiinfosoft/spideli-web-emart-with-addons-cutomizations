@@ -1081,6 +1081,50 @@
         }
     }
 
+    /* ---- 02#51: an order scheduled for later must not wake the vendor now ----
+     *
+     * Reported: "when a customer schedules an order in advance, the vendor
+     * receives the notification immediately. However, the order cannot be
+     * accepted until the scheduled date arrives. Until then, the notification
+     * sound will continue playing in the background."
+     *
+     * Both checkout paths - this one for cash and wallet, success.blade.php
+     * for the online-payment return - pushed to the vendor the instant the
+     * order was written, whatever scheduleTime said. The vendor was woken for
+     * a job they could not touch for hours.
+     *
+     * The reminder already exists: multivendorScheduledOrderNotification.js
+     * notifies them shortly before the slot, by the setting in
+     * settings/scheduleOrderNotification. THAT JOB MUST BE RUNNING ON THE
+     * SERVER - see the upload notes. Silencing this one without it would mean
+     * the vendor hears nothing at all.
+     *
+     * ONLY vendor_orders. On-demand bookings have no such reminder job, so
+     * they keep their immediate notification. */
+    function spideliIsScheduledForLater(scheduleTime) {
+        if (!scheduleTime) {
+            return false;
+        }
+
+        var when = (scheduleTime instanceof Date) ? scheduleTime : new Date(scheduleTime);
+
+        /* An unreadable date is treated as "not scheduled", so a bad value can
+         * only ever cost an extra notification - never a missing one. */
+        if (isNaN(when.getTime())) {
+            return false;
+        }
+
+        return when.getTime() > Date.now();
+    }
+
+    /* The push endpoint sends nothing when the token is empty, but still
+     * clears the cart, sets the session and returns normally - so the rest of
+     * checkout is untouched. That is how we skip the push without unpicking
+     * the callback that follows it. */
+    function spideliVendorPushToken(fcmToken, scheduleTime) {
+        return spideliIsScheduledForLater(scheduleTime) ? '' : (fcmToken || '');
+    }
+
     /* Google tags a component with several types at once, so this looks for
      * membership rather than reading types[0] - a city tagged
      * ["locality","political"] is found either way, but one tagged

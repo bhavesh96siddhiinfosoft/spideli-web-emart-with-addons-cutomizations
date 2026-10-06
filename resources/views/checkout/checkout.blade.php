@@ -1619,7 +1619,10 @@
                                     url: "<?php echo route('order-complete'); ?>",
                                     data: {
                                         _token: '<?php echo csrf_token(); ?>',
-                                        'fcm': fcmToken,
+                                        /* 02#51: empty for an order scheduled
+                                           for later - the reminder job notifies
+                                           the vendor nearer the slot. */
+                                        'fcm': spideliVendorPushToken(fcmToken, scheduleTime),
                                         'authorName': authorName,
                                         'subject': subject,
                                         'message': message
