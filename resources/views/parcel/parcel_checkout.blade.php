@@ -458,18 +458,45 @@ session_start();
             $(".distance-type").text(distanceType);
         }
 
-        // SMS Gateway setting & fee
-        database.collection('settings').doc('SMSGateway').get().then(function (smsDoc) {
+        // SMS Gateway setting & region-wise fee
+        database.collection('settings').doc('SMSGateway').get().then(async function (smsDoc) {
             if (smsDoc.exists) {
                 var sData = smsDoc.data();
                 if (sData.isEnabled === false) {
                     $('#receiver_sms_box').hide();
                 }
-                var fee = parseFloat(sData.parcelSmsFee);
-                if (!isNaN(fee) && fee >= 0) {
-                    $('#parcel_sms_fee_val').val(fee);
+            }
+
+            // Region-wise parcel SMS fee
+            var parcelRegionId = null;
+            if (typeof getActiveRegionId === 'function') {
+                parcelRegionId = await getActiveRegionId();
+            } else if (typeof getCookie === 'function') {
+                parcelRegionId = getCookie('region_id');
+            }
+
+            var fee = 0;
+            var feeFound = false;
+            if (parcelRegionId) {
+                try {
+                    var rDoc = await database.collection('regions').doc(parcelRegionId).get();
+                    if (rDoc.exists && rDoc.data().parcelSmsFee !== undefined) {
+                        fee = parseFloat(rDoc.data().parcelSmsFee);
+                        feeFound = true;
+                    }
+                } catch (e) {
+                    console.log('Error reading region parcel SMS fee:', e);
                 }
             }
+            if (!feeFound && smsDoc && smsDoc.exists && smsDoc.data().parcelSmsFee !== undefined) {
+                fee = parseFloat(smsDoc.data().parcelSmsFee);
+                feeFound = true;
+            }
+            if (!feeFound || isNaN(fee) || fee < 0) {
+                fee = 50;
+            }
+
+            $('#parcel_sms_fee_val').val(fee);
             updateSmsBadges();
         }).catch(function (err) {
             console.log('Error reading SMSGateway:', err);
