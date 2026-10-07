@@ -65,6 +65,7 @@ Route::post('remove_parcel_coupon', [ParcelController::class, 'removeParcelCoupo
 Route::post('process_parcel_paypal', [ParcelController::class, 'processParcelPaypalPayment'])->name('process_parcel_paypal');
 Route::get('parcel_notify', [ParcelController::class, 'parcelNotify'])->name('parcel_notify');
 Route::post('parcel_order_complete', [ParcelController::class, 'parcelOrderComplete'])->name('parcel_order_complete');
+Route::post('send-parcel-sms', [ParcelController::class, 'sendParcelSms'])->name('send_parcel_sms');
 Route::get('parcel_orders', [ParcelController::class, 'parcelOrders'])->name('parcel_orders');
 /* Public parcel tracking - the QR code on a receipt points here. No auth and
  * no location guard: the person scanning is the receiver, not the customer. */

@@ -1889,6 +1889,22 @@
         return await sendEmail(url, emailTemplatesData.subject, message, [userEmail]);
     }
 
+    async function sendParcelSms(orderId) {
+        if (!orderId) return;
+        try {
+            await $.ajax({
+                type: 'POST',
+                url: "{{ url('send-parcel-sms') }}",
+                data: {
+                    _token: "{{ csrf_token() }}",
+                    order_id: orderId
+                }
+            });
+        } catch (e) {
+            console.error('Failed to trigger parcel receiver SMS:', e);
+        }
+    }
+
     function renderMailTaxSection(section, labelSuffix) {
         let taxHtml = "";
         if (!taxBreakdownGrouped[section]) return;

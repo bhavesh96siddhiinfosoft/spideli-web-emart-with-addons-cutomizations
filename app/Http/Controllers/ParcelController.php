@@ -14,6 +14,7 @@ use Xendit\Invoice\CreateInvoiceRequest;
 use Xendit\XenditSdkException;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
+use App\Helpers\FirestoreHelper;
 
 class ParcelController extends Controller
 {
@@ -894,5 +895,101 @@ class ParcelController extends Controller
             return $tax['tax'];
         }
         return 0;
+    }
+
+    public function sendParcelSms(Request $request)
+    {
+        $orderId = $request->input('order_id');
+        if (empty($orderId)) {
+            return response()->json(['success' => false, 'message' => 'Order ID required']);
+        }
+
+        try {
+            $order = FirestoreHelper::getDocument("parcel_orders/{$orderId}");
+            if (empty($order)) {
+                return response()->json(['success' => false, 'message' => 'Order not found']);
+            }
+
+            // Only send if the sender opted in
+            if (empty($order['sendReceiverSms'])) {
+                return response()->json(['success' => false, 'message' => 'Receiver SMS not requested']);
+            }
+
+            // Prevent duplicate SMS sends
+            if (!empty($order['smsSent']['placed'])) {
+                return response()->json(['success' => true, 'message' => 'SMS already sent']);
+            }
+
+            $settings = FirestoreHelper::getDocument('settings/SMSGateway');
+            if (empty($settings) || empty($settings['apiKey']) || ($settings['isEnabled'] ?? true) === false) {
+                return response()->json(['success' => false, 'message' => 'SMS gateway not configured or disabled']);
+            }
+
+            $receiverPhone = $order['receiver']['phone'] ?? '';
+            $destination = self::normaliseNumber($receiverPhone);
+            if ($destination === '') {
+                return response()->json(['success' => false, 'message' => 'Invalid destination phone number']);
+            }
+
+            $senderName = $order['sender']['name'] ?? 'Sender';
+            $senderPhone = $order['sender']['phone'] ?? '';
+            $receiverName = $order['receiver']['name'] ?? 'Receiver';
+
+            $template = $settings['parcelNotificationTemplate'] ?? "Bonjour {receiver}, un colis vous a ete envoye par {sender} ({sender_phone}). Ref: {order_id} - Spideli";
+            $message = str_replace(
+                ['{receiver}', '{sender}', '{sender_phone}', '{order_id}'],
+                [$receiverName, $senderName, $senderPhone, $orderId],
+                $template
+            );
+
+            $baseUrl = rtrim($settings['apiUrl'] ?? '', '/');
+            if ($baseUrl === '') {
+                $baseUrl = 'https://obitsms.com/api/v2';
+            }
+
+            $response = Http::timeout(20)->get($baseUrl . '/bulksms', [
+                'key_api' => $settings['apiKey'],
+                'sender' => $settings['senderId'] ?? 'SPIDELI',
+                'destination' => $destination,
+                'message' => $message,
+            ]);
+
+            $body = $response->json();
+            $sent = is_array($body) && (($body['success'] ?? false) === true || ($body['code'] ?? null) == 900);
+
+            // Record in order so it is not sent again
+            FirestoreHelper::setDocument("parcel_orders/{$orderId}", [
+                'smsSent' => [
+                    'placed' => true,
+                    'timestamp' => now()->toIso8601String(),
+                    'destination' => $destination,
+                    'status' => $sent ? 'success' : 'failed',
+                ]
+            ]);
+
+            return response()->json([
+                'success' => $sent,
+                'body' => $body,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('sendParcelSms failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    private static function normaliseNumber($number)
+    {
+        $digits = preg_replace('/\D+/', '', (string) $number);
+        if ($digits === null || $digits === '') {
+            return '';
+        }
+        // Prepend Cameroon country code 237 if 9 digits starting with 6 or 2
+        if (strlen($digits) === 9 && in_array(substr($digits, 0, 1), ['6', '2'])) {
+            $digits = '237' . $digits;
+        }
+        return $digits;
     }
 }

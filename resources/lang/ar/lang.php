@@ -864,4 +864,7 @@ return [
     'order_history_print_canceled' => 'الطلبات الملغاة',
     'order_history_print_rejected' => 'الطلبات المرفوضة',
     'order_history_print_none' => 'لا توجد طلبات في هذه الفترة.',
+    'notify_receiver_sms' => 'إشعار المستلم عبر الرسائل القصيرة',
+    'notify_receiver_sms_help' => 'سيتلقى المستلم رسالة نصية قصيرة تفيد بأنه قد تم إرسال طرد إليه من قبلك.',
+    'receiver_sms_notification' => 'إشعار المستلم عبر الرسائل القصيرة',
 ];

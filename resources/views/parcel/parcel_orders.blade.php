@@ -169,6 +169,9 @@
         add("{{ trans('lang.discount') }}", figures.discount);
         add("{{ trans('lang.weight_charge') }}", figures.weightCharge);
         add("{{ trans('lang.platform_charge') }}", figures.platformFee);
+        if (figures.smsCharge) {
+            add("{{ trans('lang.receiver_sms_notification') }}", figures.smsCharge);
+        }
         add("{{ trans('lang.tax') }}", figures.tax);
 
         parcelReceipts[val.id] = {
@@ -341,8 +344,15 @@
                     });
                 });
 
+                // SMS notification charge
+                let smsCharge = 0;
+                if (val.sendReceiverSms) {
+                    smsCharge = parseFloat(val.smsCharge !== undefined ? val.smsCharge : 50);
+                    if (isNaN(smsCharge)) smsCharge = 50;
+                }
+
                 // Final total
-                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount;
+                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge;
 
                 /* The figures this card just worked out, kept for the
                  * receipt. Recorded per order because this screen lists
@@ -352,6 +362,7 @@
                     discount: total_discount,
                     platformFee: platformFee,
                     weightCharge: parcelWeightCharge,
+                    smsCharge: smsCharge,
                     tax: total_tax_amount,
                     total: order_total
                 });
@@ -376,6 +387,13 @@
                     "<label>{{trans('lang.platform_charge')}}</label>" +
                     "<span class='price ml-auto'>" + formatCurrency(platformFee, currencyData) + "</span>" +
                 "</div>";
+
+                if (val.sendReceiverSms && smsCharge > 0) {
+                    html += "<div class='payment-total d-flex'>" +
+                        "<label>{{trans('lang.receiver_sms_notification')}}</label>" +
+                        "<span class='price ml-auto'>+" + formatCurrency(smsCharge, currencyData) + "</span>" +
+                    "</div>";
+                }
                 
                 html = html + taxHtml;
 
@@ -546,8 +564,15 @@
                     });
                 });
 
+                // SMS notification charge
+                let smsCharge = 0;
+                if (val.sendReceiverSms) {
+                    smsCharge = parseFloat(val.smsCharge !== undefined ? val.smsCharge : 50);
+                    if (isNaN(smsCharge)) smsCharge = 50;
+                }
+
                 // Final total
-                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount;
+                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge;
 
                 /* The figures this card just worked out, kept for the
                  * receipt. Recorded per order because this screen lists
@@ -557,6 +582,7 @@
                     discount: total_discount,
                     platformFee: platformFee,
                     weightCharge: parcelWeightCharge,
+                    smsCharge: smsCharge,
                     tax: total_tax_amount,
                     total: order_total
                 });
@@ -581,6 +607,13 @@
                     "<label>{{trans('lang.platform_charge')}}</label>" +
                     "<span class='price ml-auto'>" + formatCurrency(platformFee, currencyData) + "</span>" +
                 "</div>";
+
+                if (val.sendReceiverSms && smsCharge > 0) {
+                    html += "<div class='payment-total d-flex'>" +
+                        "<label>{{trans('lang.receiver_sms_notification')}}</label>" +
+                        "<span class='price ml-auto'>+" + formatCurrency(smsCharge, currencyData) + "</span>" +
+                    "</div>";
+                }
                 
                 html = html + taxHtml;
 
@@ -707,8 +740,15 @@
                     });
                 });
 
+                // SMS notification charge
+                let smsCharge = 0;
+                if (val.sendReceiverSms) {
+                    smsCharge = parseFloat(val.smsCharge !== undefined ? val.smsCharge : 50);
+                    if (isNaN(smsCharge)) smsCharge = 50;
+                }
+
                 // Final total
-                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount;
+                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge;
 
                 /* The figures this card just worked out, kept for the
                  * receipt. Recorded per order because this screen lists
@@ -718,6 +758,7 @@
                     discount: total_discount,
                     platformFee: platformFee,
                     weightCharge: parcelWeightCharge,
+                    smsCharge: smsCharge,
                     tax: total_tax_amount,
                     total: order_total
                 });
@@ -742,6 +783,13 @@
                     "<label>{{trans('lang.platform_charge')}}</label>" +
                     "<span class='price ml-auto'>" + formatCurrency(platformFee, currencyData) + "</span>" +
                 "</div>";
+
+                if (val.sendReceiverSms && smsCharge > 0) {
+                    html += "<div class='payment-total d-flex'>" +
+                        "<label>{{trans('lang.receiver_sms_notification')}}</label>" +
+                        "<span class='price ml-auto'>+" + formatCurrency(smsCharge, currencyData) + "</span>" +
+                    "</div>";
+                }
                 
                 html = html + taxHtml;
 

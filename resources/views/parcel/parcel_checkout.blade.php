@@ -170,6 +170,17 @@ session_start();
                                     </ul>
                                 </div>
                             </div>
+                            <div class="receiver_sms_option p-3 mb-3 border rounded bg-light" id="receiver_sms_box">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="notify_receiver_sms">
+                                    <label class="custom-control-label font-weight-bold" for="notify_receiver_sms">
+                                        {{ trans('lang.notify_receiver_sms') }} (<span id="sms_fee_badge">+{{ formatCurrency(50, $parcel_cart['currencyData']) }}</span>)
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block mt-1 pl-4">
+                                    {{ trans('lang.notify_receiver_sms_help') }}
+                                </small>
+                            </div>
                             <div class="select_payment" id="payment_option">
                                 <h5>{{trans('lang.Select_Payment')}}</h5>
                                 <div class="select_payment-option">
@@ -308,11 +319,20 @@ session_start();
                                 </span>
                             </div>
 
+                            <div class="payment-total d-flex" id="sms_charge_row" style="display: none !important;">
+                                <label>{{ trans('lang.receiver_sms_notification') }}</label>
+                                <span class="price ml-auto" id="sms_charge_val" style="color: green;">
+                                    +{{ formatCurrency(50, $parcel_cart['currencyData']) }}
+                                </span>
+                            </div>
+
                             <input type="hidden" id="discount" value="<?php echo number_format($discount, $parcel_cart['decimal_degits']); ?>">
                             <input type="hidden" id="discountType" value="<?php echo $discountType ?>">
                             <input type="hidden" id="discountLabel" value="<?php echo $discount_label; ?>">
                             <input type="hidden" id="coupon_id" value="<?php echo $coupon_id; ?>">
                             <input type="hidden" id="total_item_price" value="<?php echo $parcel_cart['parcelDeliveryCharge']; ?>">
+                            <input type="hidden" id="base_total_pay" value="<?php echo $parcel_cart['total_pay']; ?>">
+                            <input type="hidden" id="parcel_sms_fee_val" value="50">
                             <input type="hidden" id="total_pay" value="<?php echo $parcel_cart['total_pay']; ?>">
 
                             @if(!empty($parcel_cart['taxBreakdownGrouped']))
@@ -347,7 +367,7 @@ session_start();
                             
                             <div class="payment-total d-flex">
                                 <label><strong>{{trans('lang.order_total')}}</strong></label>
-                                <span class="price ml-auto">
+                                <span class="price ml-auto" id="order_total_display">
                                     {{ formatCurrency($parcel_cart['total_pay'], $parcel_cart['currencyData']) }}
                                 </span>
                             </div>
@@ -437,6 +457,51 @@ session_start();
             $(".total .distance-number").text(distance.toFixed(2));
             $(".distance-type").text(distanceType);
         }
+
+        // SMS Gateway setting & fee
+        database.collection('settings').doc('SMSGateway').get().then(function (smsDoc) {
+            if (smsDoc.exists) {
+                var sData = smsDoc.data();
+                if (sData.isEnabled === false) {
+                    $('#receiver_sms_box').hide();
+                }
+                var fee = parseFloat(sData.parcelSmsFee);
+                if (!isNaN(fee) && fee >= 0) {
+                    $('#parcel_sms_fee_val').val(fee);
+                }
+            }
+            updateSmsBadges();
+        }).catch(function (err) {
+            console.log('Error reading SMSGateway:', err);
+        });
+
+        function updateSmsBadges() {
+            var fee = parseFloat($('#parcel_sms_fee_val').val()) || 50;
+            if (currencyData) {
+                $('#sms_fee_badge').text('+' + formatCurrency(fee, currencyData));
+                $('#sms_charge_val').text('+' + formatCurrency(fee, currencyData));
+            }
+        }
+
+        $('#notify_receiver_sms').on('change', function () {
+            var isChecked = $(this).is(':checked');
+            var baseTotal = parseFloat($('#base_total_pay').val()) || 0;
+            var fee = parseFloat($('#parcel_sms_fee_val').val()) || 50;
+            var currentSmsCharge = isChecked ? fee : 0;
+            var newTotal = baseTotal + currentSmsCharge;
+
+            if (isChecked) {
+                $('#sms_charge_row').attr('style', 'display: flex !important;');
+            } else {
+                $('#sms_charge_row').attr('style', 'display: none !important;');
+            }
+
+            $('#total_pay').val(newTotal.toFixed(decimal_degits));
+            if (currencyData) {
+                $('#order_total_display').text(formatCurrency(newTotal, currencyData));
+                $('#pay_parcel').html("{{trans('lang.pay')}} " + formatCurrency(newTotal, currencyData));
+            }
+        });
     })   
     
 
@@ -1495,6 +1560,8 @@ session_start();
                 var orangepay_clientId = $("#orangepay_clientId").val();
                 var orangepay_clientSecret = $("#orangepay_clientSecret").val();
                 var orangepay_merchantKey = $("#orangepay_merchantKey").val();
+                var sendReceiverSms = $('#notify_receiver_sms').is(':checked');
+                var smsCharge = sendReceiverSms ? (parseFloat($('#parcel_sms_fee_val').val()) || 50) : 0;
                 var order_json = {
                     authorID: authorID,
                     id: id_order,
@@ -1504,6 +1571,8 @@ session_start();
                     adminCommission: adminCommission,
                     payment_method: payment_method,
                     paymentCollectByReceiver: paymentCollectByReceiver,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                     senderName: senderName,
                     section_id: section_id,
                     parcelCategoryId: parcelCategoryId,
@@ -1642,6 +1711,8 @@ session_start();
                     'taxScope': taxScope,
                     'platformFee': platformCharge,
                     'platformTax': platformTax,
+                    'sendReceiverSms': sendReceiverSms,
+                    'smsCharge': smsCharge,
                 }).then(function (result) {
 
                     $.ajax({
@@ -1667,11 +1738,17 @@ session_start();
                                         'user_id': authorID
                                     }).then(async function (result) {
                                         await sendMailToParcel(id_order, authorID);
+                                        if (sendReceiverSms) {
+                                            await sendParcelSms(id_order);
+                                        }
                                         window.location.href = "{{ route('parcel_success') }}";
                                     })
                                 });
                             } else {
                                 await sendMailToParcel(id_order, authorID);
+                                if (sendReceiverSms) {
+                                    await sendParcelSms(id_order);
+                                }
                                 window.location.href = "{{ route('parcel_success') }}";
                             }
                         }

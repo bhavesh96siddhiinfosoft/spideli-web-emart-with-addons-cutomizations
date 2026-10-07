@@ -1049,5 +1049,8 @@ return [
     'payment_methods_no_cards' => 'We never store card details. Only mobile money numbers are saved here.',
     'wholesale_business_only_title' => 'This item is for business accounts',
     'wholesale_business_only' => 'This item is sold to approved business accounts only. Apply for a business account to buy it.',
+    'notify_receiver_sms' => 'Notify receiver via SMS',
+    'notify_receiver_sms_help' => 'The receiver will receive an SMS notification stating that a parcel has been sent to them by you.',
+    'receiver_sms_notification' => 'Receiver SMS Notification',
 ];
 

@@ -181,6 +181,8 @@
                         'taxScope': taxScope,
                         'platformFee': platformCharge,
                         'platformTax': platformTax,
+                        'sendReceiverSms': order_json.sendReceiverSms ? true : false,
+                        'smsCharge': order_json.smsCharge ? parseFloat(order_json.smsCharge) : 0,
                     }).then(function (result) {
                         $.ajax({
                             type: 'POST',
@@ -190,6 +192,9 @@
                             },
                             success: async function (data) {
                                 await sendMailToParcel(id_order, order_json.authorID);
+                                if (order_json.sendReceiverSms) {
+                                    await sendParcelSms(id_order);
+                                }
                                 $("#overlay").hide();
                             }
                         });
