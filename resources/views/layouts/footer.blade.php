@@ -1407,267 +1407,282 @@
     };
     
     async function sendMailData(orderId, userId) {
-        
-        const emailTemplatesPromise = database.collection('email_templates').where('type', '==', 'new_order_placed').limit(1).get();
-        const [orderRef, userRef, emailTempSnapshot] = await Promise.all([
-            database.collection('vendor_orders').doc(orderId).get(),
-            database.collection('users').doc(userId).get(),
-            emailTemplatesPromise
-        ]);
-        /* NO TEMPLATE MEANS NO EMAIL. The admin can rename or delete a
-         * template type, and docs[0] on an empty result threw - DURING
-         * ORDER PLACEMENT, so a missing template failed the order rather
-         * than just the mail. */
-        if (emailTempSnapshot.empty) return;
+        try {
+            const emailTemplatesPromise = database.collection('email_templates').where('type', '==', 'new_order_placed').limit(1).get();
+            const [orderRef, userRef, emailTempSnapshot] = await Promise.all([
+                database.collection('vendor_orders').doc(orderId).get(),
+                database.collection('users').doc(userId).get(),
+                emailTemplatesPromise
+            ]);
+            /* NO TEMPLATE MEANS NO EMAIL. The admin can rename or delete a
+             * template type, and docs[0] on an empty result threw - DURING
+             * ORDER PLACEMENT, so a missing template failed the order rather
+             * than just the mail. */
+            if (emailTempSnapshot.empty) return;
 
-        if (!orderRef.exists || !userRef.exists) return;
+            if (!orderRef.exists || !userRef.exists) return;
 
-        const orderDetails = orderRef.data();
-        const userDetails = userRef.data();
-        const emailTemplatesData = emailTempSnapshot.docs[0].data();
-        
-        let orderUserName = userDetails.firstName+' '+userDetails.lastName;
-        let orderUserEmail = userDetails.email;
-        
-        var order_subtotal = 0;
-        var total_discount = 0;
-        var total_tax_amount = 0;
-        var tip_amount = parseFloat(orderDetails.tip_amount || 0);
-        var deliveryCharge = parseFloat(orderDetails.deliveryCharge || 0);
-        var platformFee = parseFloat(orderDetails.platformFee || 0);
-        var packagingCharge = orderDetails.packagingChargeEnable ? parseFloat(orderDetails.vendor.packagingCharge || 0) : 0;
+            const orderDetails = orderRef.data();
+            const userDetails = userRef.data();
+            const emailTemplatesData = emailTempSnapshot.docs[0].data();
+            
+            let orderUserName = userDetails.firstName+' '+userDetails.lastName;
+            let orderUserEmail = userDetails.email;
+            
+            var order_subtotal = 0;
+            var total_discount = 0;
+            var total_tax_amount = 0;
+            var tip_amount = parseFloat(orderDetails.tip_amount || 0);
+            var deliveryCharge = parseFloat(orderDetails.deliveryCharge || 0);
+            var platformFee = parseFloat(orderDetails.platformFee || 0);
+            var packagingCharge = (orderDetails && orderDetails.packagingChargeEnable) ? parseFloat(orderDetails.vendor?.packagingCharge || 0) : 0;
 
-        // Calculate subtotal and product extras
-        for (let i = 0; i < orderDetails.products.length; i++) {
-            let product = orderDetails.products[i];
-            let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-            let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
-            order_subtotal += itemGross;
-        }
-
-         // Total discounts
-        let order_discount = parseFloat(orderDetails.discount || 0);
-        let special_discount = parseFloat(orderDetails.specialDiscount?.special_discount || 0);
-            total_discount = order_discount + special_discount;
-
-        // Calculate item-level taxes (if product-level)
-        if (orderDetails.taxScope === "product") {
-            let itemSubtotal = order_subtotal;
-            let itemCombinedTax = 0;
-            orderDetails.products.forEach(product => {
+            // Calculate subtotal and product extras
+            for (let i = 0; i < (orderDetails.products || []).length; i++) {
+                let product = orderDetails.products[i];
                 let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
                 let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
-                let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
-                let itemTaxable = Math.max(0, itemGross - itemDiscount);
-                let itemTaxes = product.taxSetting || [];
-                itemTaxes.forEach(tax => {
+                order_subtotal += itemGross;
+            }
+
+             // Total discounts
+            let order_discount = parseFloat(orderDetails.discount || 0);
+            let special_discount = parseFloat(orderDetails.specialDiscount?.special_discount || 0);
+                total_discount = order_discount + special_discount;
+
+            // Calculate item-level taxes (if product-level)
+            if (orderDetails.taxScope === "product") {
+                let itemSubtotal = order_subtotal;
+                let itemCombinedTax = 0;
+                (orderDetails.products || []).forEach(product => {
+                    let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
+                    let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                    let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
+                    let itemTaxable = Math.max(0, itemGross - itemDiscount);
+                    let itemTaxes = product.taxSetting || [];
+                    itemTaxes.forEach(tax => {
+                        if (tax.enable) {
+                            let taxAmount = 0;
+                            if (tax.type === "percentage") {
+                                taxAmount = (tax.tax / 100) * itemTaxable;
+                            } else {
+                                taxAmount = tax.tax;
+                            }
+                            total_tax_amount += parseFloat(taxAmount);
+                            itemCombinedTax += parseFloat(taxAmount);
+                        }
+                    });
+                });
+                if(itemCombinedTax > 0){
+                    taxBreakdownGrouped.item[''] = itemCombinedTax;
+                }
+            } 
+
+            // Order-level taxes (if order-level)
+            if (orderDetails.taxScope === "order") {
+                let orderTaxable = Math.max(0, order_subtotal - total_discount);
+                let orderCombinedTax = 0;
+                (orderDetails.taxSetting || []).forEach(tax => {
                     if (tax.enable) {
                         let taxAmount = 0;
                         if (tax.type === "percentage") {
-                            taxAmount = (tax.tax / 100) * itemTaxable;
+                            taxAmount = (tax.tax / 100) * orderTaxable;
                         } else {
                             taxAmount = tax.tax;
                         }
                         total_tax_amount += parseFloat(taxAmount);
-                        itemCombinedTax += parseFloat(taxAmount);
+                        orderCombinedTax += parseFloat(taxAmount);
+                    }
+                });
+                if(orderCombinedTax > 0){
+                    taxBreakdownGrouped.order[''] = orderCombinedTax;
+                }
+            }
+
+            // Delivery, packaging, platform taxes
+            let extraCharges = [
+                {key: 'delivery', amount: deliveryCharge, taxes: orderDetails.driverDeliveryTax || []},
+                {key: 'packaging', amount: packagingCharge, taxes: orderDetails.packagingTax || []},
+                {key: 'platform', amount: platformFee, taxes: orderDetails.platformTax || []},
+            ];
+
+            extraCharges.forEach(scope => {
+                scope.taxes?.forEach(tax => {
+                    if (tax.enable) {
+                        let taxAmount = 0;
+                        if(scope.amount > 0){
+                            if (tax.type === "percentage") {
+                                taxAmount = (tax.tax / 100) * scope.amount;
+                            } else {
+                                taxAmount = tax.tax;
+                            }
+                        }
+                        total_tax_amount += parseFloat(taxAmount);
+                        taxBreakdownGrouped[scope.key][tax.title] = (taxBreakdownGrouped[scope.key][tax.title] || 0) + parseFloat(taxAmount);
                     }
                 });
             });
-            if(itemCombinedTax > 0){
-                taxBreakdownGrouped.item[''] = itemCombinedTax;
-            }
-        } 
+            
+            // Final total
+            var order_total = (order_subtotal - total_discount) + deliveryCharge + tip_amount + packagingCharge + platformFee + total_tax_amount;
 
-        // Order-level taxes (if order-level)
-        if (orderDetails.taxScope === "order") {
-            let orderTaxable = Math.max(0, order_subtotal - total_discount);
-            let orderCombinedTax = 0;
-            (orderDetails.taxSetting || []).forEach(tax => {
-                if (tax.enable) {
-                    let taxAmount = 0;
-                    if (tax.type === "percentage") {
-                        taxAmount = (tax.tax / 100) * orderTaxable;
-                    } else {
-                        taxAmount = tax.tax;
+            var subTotalText = formatCurrency(order_subtotal, currencyData);
+            var discountText = formatCurrency(order_discount, currencyData);
+            var deliveryChargeText = formatCurrency(deliveryCharge, currencyData);
+            var packagingChargeText = formatCurrency(packagingCharge, currencyData);
+            var platformFeeText = formatCurrency(platformFee, currencyData);
+            var tipAmountText = formatCurrency(tip_amount, currencyData);
+            var totalAmountText = formatCurrency(order_total, currencyData);
+            
+            var productDetailsHtml = '';
+            (orderDetails.products || []).forEach((product) => {
+                productDetailsHtml += '<tr>';
+                var extra_html = '';
+                var extras_price = 0;
+                var basePriceValue = (product.discountPrice !== undefined &&
+                          product.discountPrice !== null &&
+                          parseFloat(product.discountPrice) > 0)
+                        ? parseFloat(product.discountPrice)
+                        : parseFloat(product.price);
+
+                var price_item = basePriceValue.toFixed(decimal_degits);
+                var totalProductPrice = parseFloat(price_item) * parseInt(product.quantity);
+                
+                if (product.extras != undefined && product.extras != '' && product.extras.length > 0) {
+                    var extra_count = 0;
+                    let extras_price_item = (parseFloat(product.extras_price || 0) * parseInt(product.quantity));
+                    if (!isNaN(extras_price_item)) {
+                        extras_price = extras_price_item.toFixed(decimal_degits);
+                        totalProductPrice += parseFloat(extras_price);
                     }
-                    total_tax_amount += parseFloat(taxAmount);
-                    orderCombinedTax += parseFloat(taxAmount);
-                }
-            });
-            if(orderCombinedTax > 0){
-                taxBreakdownGrouped.order[''] = orderCombinedTax;
-            }
-        }
-
-        // Delivery, packaging, platform taxes
-        let extraCharges = [
-            {key: 'delivery', amount: deliveryCharge, taxes: orderDetails.driverDeliveryTax || []},
-            {key: 'packaging', amount: packagingCharge, taxes: orderDetails.packagingTax || []},
-            {key: 'platform', amount: platformFee, taxes: orderDetails.platformTax || []},
-        ];
-
-        extraCharges.forEach(scope => {
-            scope.taxes?.forEach(tax => {
-                if (tax.enable) {
-                    let taxAmount = 0;
-                    if(scope.amount > 0){
-                        if (tax.type === "percentage") {
-                            taxAmount = (tax.tax / 100) * scope.amount;
+                    product.extras.forEach((extra) => {
+                        if (extra_count > 1) {
+                            extra_html = extra_html + ',' + extra;
                         } else {
-                            taxAmount = tax.tax;
+                            extra_html = extra_html + extra;
                         }
-                    }
-                    total_tax_amount += parseFloat(taxAmount);
-                    taxBreakdownGrouped[scope.key][tax.title] = (taxBreakdownGrouped[scope.key][tax.title] || 0) + parseFloat(taxAmount);
+                        extra_count++;
+                    })
                 }
+                productDetailsHtml += '<td style="width: 20%; border-top: 1px solid rgb(0, 0, 0);">';
+                productDetailsHtml += product.name;
+                if (extra_count > 0) {
+                    productDetailsHtml += '<br> {{ trans('lang.extra_item') }} : ' + extra_html;
+                }
+                
+                var price_item = formatCurrency(price_item, currencyData);
+                var extras_price = formatCurrency(extras_price, currencyData);
+                var totalProductPrice = formatCurrency(totalProductPrice, currencyData);
+
+                productDetailsHtml += '</td>';
+                productDetailsHtml += '<td style="width: 20%; border: 1px solid rgb(0, 0, 0);">' + product
+                    .quantity + '</td><td style="width: 20%; border: 1px solid rgb(0, 0, 0);">' + price_item +
+                    '</td><td style="width: 20%; border: 1px solid rgb(0, 0, 0);">' + extras_price +
+                    '</td><td style="width: 20%; border: 1px solid rgb(0, 0, 0);">  ' + totalProductPrice +
+                    '</td>';
+                productDetailsHtml += '</tr>';
             });
-        });
-        
-        // Final total
-        var order_total = (order_subtotal - total_discount) + deliveryCharge + tip_amount + (packagingChargeEnable ? packagingCharge : 0) + platformFee + total_tax_amount;
 
-        var subTotalText = formatCurrency(order_subtotal, currencyData);
-        var discountText = formatCurrency(order_discount, currencyData);
-        var deliveryChargeText = formatCurrency(deliveryCharge, currencyData);
-        var packagingChargeText = formatCurrency(packagingCharge, currencyData);
-        var platformFeeText = formatCurrency(platformFee, currencyData);
-        var tipAmountText = formatCurrency(tip_amount, currencyData);
-        var totalAmountText = formatCurrency(order_total, currencyData);
-        
-        var productDetailsHtml = '';
-        orderDetails.products.forEach((product) => {
-            productDetailsHtml += '<tr>';
-            var extra_html = '';
-            var extras_price = 0;
-            var basePriceValue = (product.discountPrice !== undefined &&
-                      product.discountPrice !== null &&
-                      parseFloat(product.discountPrice) > 0)
-                    ? parseFloat(product.discountPrice)
-                    : parseFloat(product.price);
+            var productHtml =
+            '<table style="width: 100%; border-collapse: collapse; border: 1px solid rgb(0, 0, 0);">\n' +
+            '    <thead>\n' +
+            '        <tr>\n' +
+            '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.product_name') }}<br></th>\n' +
+            '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.quantity_plural') }}<br></th>\n' +
+            '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.price') }}<br></th>\n' +
+            '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.extra_item') }} {{ trans('lang.price') }}<br></th>\n' +
+            '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.total') }}<br></th>\n' +
+            '        </tr>\n' +
+            '    </thead>\n' +
+            '    <tbody id="productDetails">' + productDetailsHtml + '</tbody>\n' +
+            '</table>';
 
-            var price_item = basePriceValue.toFixed(decimal_degits);
-            var totalProductPrice = parseFloat(price_item) * parseInt(product.quantity);
-            
-            if (product.extras != undefined && product.extras != '' && product.extras.length > 0) {
-                var extra_count = 0;
-                let extras_price_item = (parseFloat(product.extras_price || 0) * parseInt(product.quantity));
-                if (!isNaN(extras_price_item)) {
-                    extras_price = extras_price_item.toFixed(decimal_degits);
-                    totalProductPrice += parseFloat(extras_price);
+            var specialDiscountVal = '';
+            var specialDiscountAmount = 0;
+            var totalAmount = 0;
+            if (orderDetails.specialDiscount && orderDetails.specialDiscount.specialType && orderDetails.specialDiscount.specialType != '') {
+                specialDiscountAmount = parseFloat(orderDetails.specialDiscount.special_discount || 0).toFixed(2);
+                if (orderDetails.specialDiscount.specialType == "percentage") {
+                    specialDiscountVal = (orderDetails.specialDiscount.special_discount_label || 0) + '%';
+                } else {
+                    specialDiscountVal = formatCurrency(orderDetails.specialDiscount.special_discount_label || 0, currencyData);
                 }
-                product.extras.forEach((extra) => {
-                    if (extra_count > 1) {
-                        extra_html = extra_html + ',' + extra;
-                    } else {
-                        extra_html = extra_html + extra;
-                    }
-                    extra_count++;
-                })
             }
-            productDetailsHtml += '<td style="width: 20%; border-top: 1px solid rgb(0, 0, 0);">';
-            productDetailsHtml += product.name;
-            if (extra_count > 0) {
-                productDetailsHtml += '<br> {{ trans('lang.extra_item') }} : ' + extra_html;
+            var specialDiscountAmountText = formatCurrency(specialDiscountAmount, currencyData);
+
+            /* 02#18: hasOwnProperty is TRUE when the field holds null, which is
+             * how "null" reached the screen. The helper drops absent parts, strips
+             * "null" out of an already-joined locality, and returns '' when there
+             * is no address at all - so the old guard is no longer needed. */
+            var shippingddress = spideliFormatAddress(orderDetails.address);
+
+            let formattedDate = new Date().toLocaleDateString('en-GB');
+
+            var subject = emailTemplatesData.subject;
+            subject = subject.replace(/{orderid}/g, orderDetails.id);
+
+            emailTemplatesData.subject = subject;
+            var message = emailTemplatesData.message;
+
+            message = message.replace(/{username}/g, orderUserName);
+            message = message.replace(/{orderid}/g, orderDetails.id);
+            message = message.replace(/{date}/g, formattedDate);
+
+            let scheduleDateStr = '';
+            if (orderDetails.scheduleTime) {
+                try {
+                    let sDate = (orderDetails.scheduleTime.toDate) ? orderDetails.scheduleTime.toDate() : new Date(orderDetails.scheduleTime);
+                    scheduleDateStr = sDate.toLocaleString('en-GB');
+                } catch (e) {}
             }
-            
-            var price_item = formatCurrency(price_item, currencyData);
-            var extras_price = formatCurrency(extras_price, currencyData);
-            var totalProductPrice = formatCurrency(totalProductPrice, currencyData);
+            message = message.replace(/{scheduletime}/g, scheduleDateStr);
+            message = message.replace(/{schedule_time}/g, scheduleDateStr);
 
-            productDetailsHtml += '</td>';
-            productDetailsHtml += '<td style="width: 20%; border: 1px solid rgb(0, 0, 0);">' + product
-                .quantity + '</td><td style="width: 20%; border: 1px solid rgb(0, 0, 0);">' + price_item +
-                '</td><td style="width: 20%; border: 1px solid rgb(0, 0, 0);">' + extras_price +
-                '</td><td style="width: 20%; border: 1px solid rgb(0, 0, 0);">  ' + totalProductPrice +
-                '</td>';
-            productDetailsHtml += '</tr>';
-        });
+            message = message.replace(/{address}/g, shippingddress);
+            message = message.replace(/{paymentmethod}/g, orderDetails.payment_method);
+            message = message.replace(/{productdetails}/g, productHtml);
+            message = message.replace(/{subtotal}/g, subTotalText);
 
-        var productHtml =
-        '<table style="width: 100%; border-collapse: collapse; border: 1px solid rgb(0, 0, 0);">\n' +
-        '    <thead>\n' +
-        '        <tr>\n' +
-        '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.product_name') }}<br></th>\n' +
-        '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.quantity_plural') }}<br></th>\n' +
-        '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.price') }}<br></th>\n' +
-        '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.extra_item') }} {{ trans('lang.price') }}<br></th>\n' +
-        '            <th style="text-align: left; border: 1px solid rgb(0, 0, 0);">{{ trans('lang.total') }}<br></th>\n' +
-        '        </tr>\n' +
-        '    </thead>\n' +
-        '    <tbody id="productDetails">' + productDetailsHtml + '</tbody>\n' +
-        '</table>';
-
-        var specialDiscountVal = '';
-        var specialDiscountAmount = 0;
-        var totalAmount = 0;
-        if (orderDetails.specialDiscount.specialType != '') {
-            specialDiscountAmount = parseFloat(orderDetails.specialDiscount.special_discount).toFixed(2);
-            if (orderDetails.specialDiscount.specialType == "percentage") {
-                specialDiscountVal = orderDetails.specialDiscount.special_discount_label + '%';
+            if (orderDetails.couponCode) {
+                message = message.replace(/{coupon}/g, '(' + orderDetails.couponCode + ')');
             } else {
-                specialDiscountVal = formatCurrency(orderDetails.specialDiscount.special_discount_label, currencyData);
+                message = message.replace(/{coupon}/g, "");
             }
+            message = message.replace(/{discountamount}/g, discountText);
+            
+            if (specialDiscountVal != '') {
+                message = message.replace(/{specialcoupon}/g, '(' + specialDiscountVal + ')');
+            } else {
+                message = message.replace(/{specialcoupon}/g, "");
+            }
+
+            message = message.replace(/{specialdiscountamount}/g, specialDiscountAmountText);
+            message = message.replace(/{shippingcharge}/g, deliveryChargeText);
+            message = message.replace(/{packagingcharge}/g, packagingChargeText);
+            message = message.replace(/{platformcharge}/g, platformFeeText);
+            message = message.replace(/{tipamount}/g, tipAmountText);
+
+            var taxDetailsHtml = renderMailTaxSection('item', 'Tax on Item Total');
+            taxDetailsHtml += renderMailTaxSection('order', 'Tax on Order Total');
+            taxDetailsHtml += renderMailTaxSection('delivery', 'Tax on Delivery Fee');
+            taxDetailsHtml += renderMailTaxSection('packaging', 'Tax on Packaging Fee');
+            taxDetailsHtml += renderMailTaxSection('platform', 'Tax on Platform Fee');
+            taxDetailsHtml += `<strong>Total Tax : ${formatCurrency(total_tax_amount, currencyData)}</strong><br>`;
+            if (taxDetailsHtml != '') {
+                message = message.replace(/{taxdetails}/g, taxDetailsHtml);
+            } else {
+                message = message.replace(/{taxdetails}/g, "");
+            }
+            message = message.replace(/{totalAmount}/g, totalAmountText);
+            
+            emailTemplatesData.message = message;
+
+            var url = "{{ url('send-email') }}";
+            return await sendEmail(url, emailTemplatesData.subject, emailTemplatesData.message, [orderUserEmail]);
+        } catch (err) {
+            console.error("sendMailData error:", err);
+            return false;
         }
-        var specialDiscountAmountText = formatCurrency(specialDiscountAmount, currencyData);
-
-        /* 02#18: hasOwnProperty is TRUE when the field holds null, which is
-         * how "null" reached the screen. The helper drops absent parts, strips
-         * "null" out of an already-joined locality, and returns '' when there
-         * is no address at all - so the old guard is no longer needed. */
-        var shippingddress = spideliFormatAddress(orderDetails.address);
-
-        let formattedDate = new Date().toLocaleDateString('en-GB');
-
-        var subject = emailTemplatesData.subject;
-        subject = subject.replace(/{orderid}/g, orderDetails.id);
-
-        emailTemplatesData.subject = subject;
-        var message = emailTemplatesData.message;
-
-        message = message.replace(/{username}/g, orderUserName);
-        message = message.replace(/{orderid}/g, orderDetails.id);
-        message = message.replace(/{date}/g, formattedDate);
-        message = message.replace(/{address}/g, shippingddress);
-        message = message.replace(/{paymentmethod}/g, orderDetails.payment_method);
-        message = message.replace(/{productdetails}/g, productHtml);
-        message = message.replace(/{subtotal}/g, subTotalText);
-
-        if (orderDetails.couponCode) {
-            message = message.replace(/{coupon}/g, '(' + orderDetails.couponCode + ')');
-        } else {
-            message = message.replace(/{coupon}/g, "");
-        }
-        message = message.replace(/{discountamount}/g, discountText);
-        
-        if (specialDiscountVal != '') {
-            message = message.replace(/{specialcoupon}/g, '(' + specialDiscountVal + ')');
-        } else {
-            message = message.replace(/{specialcoupon}/g, "");
-        }
-
-        message = message.replace(/{specialdiscountamount}/g, specialDiscountAmountText);
-        message = message.replace(/{shippingcharge}/g, deliveryChargeText);
-        message = message.replace(/{packagingcharge}/g, packagingChargeText);
-        message = message.replace(/{platformcharge}/g, platformFeeText);
-        message = message.replace(/{tipamount}/g, tipAmountText);
-
-        var taxDetailsHtml = renderMailTaxSection('item', 'Tax on Item Total');
-        taxDetailsHtml += renderMailTaxSection('order', 'Tax on Order Total');
-        taxDetailsHtml += renderMailTaxSection('delivery', 'Tax on Delivery Fee');
-        taxDetailsHtml += renderMailTaxSection('packaging', 'Tax on Packaging Fee');
-        taxDetailsHtml += renderMailTaxSection('platform', 'Tax on Platform Fee');
-        taxDetailsHtml += `<strong>Total Tax : ${formatCurrency(total_tax_amount, currencyData)}</strong><br>`;
-        if (taxDetailsHtml != '') {
-            message = message.replace(/{taxdetails}/g, taxDetailsHtml);
-        } else {
-            message = message.replace(/{taxdetails}/g, "");
-        }
-        message = message.replace(/{totalAmount}/g, totalAmountText);
-        
-        emailTemplatesData.message = message;
-
-        var url = "{{ url('send-email') }}";
-        return await sendEmail(url, emailTemplatesData.subject, emailTemplatesData.message, [orderUserEmail]);
     }
 
     async function sendOnDemandMailData(orderId, serviceId, userId) {
@@ -1992,22 +2007,42 @@
             .replace(/{date}/g, details.date || '');
     }
 
+    function b64EncodeUnicode(str) {
+        if (!str) return '';
+        try {
+            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
+                return String.fromCharCode('0x' + p1);
+            }));
+        } catch (e) {
+            try {
+                return btoa(unescape(encodeURIComponent(str)));
+            } catch (err) {
+                return btoa(str);
+            }
+        }
+    }
+
     async function sendEmailToAdmin(url, subject, message) {
         var checkFlag = false;
-        await $.ajax({
-            type: 'POST',
-            data: {
-                subject: subject,
-                message: btoa(message),
-                to_admin: 1
-            },
-            url: url,
-            headers: {
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-            },
-            success: function () { checkFlag = true; },
-            error: function () { checkFlag = true; }
-        });
+        try {
+            await $.ajax({
+                type: 'POST',
+                data: {
+                    subject: subject,
+                    message: b64EncodeUnicode(message),
+                    to_admin: 1
+                },
+                url: url,
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function () { checkFlag = true; },
+                error: function () { checkFlag = true; }
+            });
+        } catch (e) {
+            console.error('Error in sendEmailToAdmin:', e);
+            checkFlag = true;
+        }
         return checkFlag;
     }
 
@@ -2039,24 +2074,29 @@
 
     async function sendEmail(url, subject, message, recipients) {
         var checkFlag = false;
-        await $.ajax({
-            type: 'POST',
-            data: {
-                subject: subject,
-                message: btoa(message),
-                recipients: recipients
-            },
-            url: url,
-            headers: {
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-            },
-            success: function(data) {
-                checkFlag = true;
-            },
-            error: function(xhr, status, error) {
-                checkFlag = true;
-            }
-        });
+        try {
+            await $.ajax({
+                type: 'POST',
+                data: {
+                    subject: subject,
+                    message: b64EncodeUnicode(message),
+                    recipients: recipients
+                },
+                url: url,
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(data) {
+                    checkFlag = true;
+                },
+                error: function(xhr, status, error) {
+                    checkFlag = true;
+                }
+            });
+        } catch (e) {
+            console.error('Error in sendEmail:', e);
+            checkFlag = true;
+        }
         return checkFlag;
     }
 

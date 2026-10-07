@@ -1649,13 +1649,14 @@
                                                     $('#cart_list').html(data.html);
                                                     loadcurrencynew();
                                                     if (authorEmail != '' && authorEmail != null) {
-                                                        var emailUserData = await sendMailData(id_order, userDetails.id);
-                                                        if (vendorUser && vendorUser != undefined) {
-                                                            var emailVendorData = await sendMailData(id_order,vendorDetails.author);
+                                                        try {
+                                                            var emailUserData = await sendMailData(id_order, userDetails.id);
+                                                            if (vendorUser && vendorUser != undefined) {
+                                                                var emailVendorData = await sendMailData(id_order,vendorDetails.author);
+                                                            }
+                                                        } catch (mailErr) {
+                                                            console.error("Error sending order email:", mailErr);
                                                         }
-                                                    } else {
-                                                        jQuery("#overlay").hide();
-                                                        window.location.href = "<?php echo url('success'); ?>";
                                                     }
                                                     jQuery("#overlay").hide();
                                                     window.location.href = "<?php echo url('success'); ?>";
@@ -1664,9 +1665,13 @@
                                         } else {
                                             $('#cart_list').html(data.html);
                                             if (authorEmail != '' && authorEmail != null) {
-                                                var emailUserData = await sendMailData(id_order, userDetails.id);
-                                                if (vendorUser && vendorUser != undefined) {
-                                                    var emailVendorData = await sendMailData(id_order,vendorDetails.author);
+                                                try {
+                                                    var emailUserData = await sendMailData(id_order, userDetails.id);
+                                                    if (vendorUser && vendorUser != undefined) {
+                                                        var emailVendorData = await sendMailData(id_order,vendorDetails.author);
+                                                    }
+                                                } catch (mailErr) {
+                                                    console.error("Error sending order email:", mailErr);
                                                 }
                                             }
                                             jQuery("#overlay").hide();

@@ -210,9 +210,13 @@
                                 },
                                 success: async function (data) {
                                     $("#overlay").hide();
-                                    var emailUserData = await sendMailData(id_order,userDetails.id);
-                                    if (vendorUser && vendorUser != undefined) {
-                                        var emailVendorData = await sendMailData(id_order,vendorDetails.author);
+                                    try {
+                                        var emailUserData = await sendMailData(id_order,userDetails.id);
+                                        if (vendorUser && vendorUser != undefined) {
+                                            var emailVendorData = await sendMailData(id_order,vendorDetails.author);
+                                        }
+                                    } catch (mailErr) {
+                                        console.error("Error sending order email:", mailErr);
                                     }
                                     data = JSON.parse(data);
                                 }

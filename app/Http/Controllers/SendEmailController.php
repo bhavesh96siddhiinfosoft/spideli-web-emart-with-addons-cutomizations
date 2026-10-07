@@ -49,8 +49,8 @@ class SendEmailController extends Controller
     function sendMail(Request $request)
     {
         $data = $request->all();
-        $subject = $data['subject'];
-        $message = base64_decode($data['message']);
+        $subject = $data['subject'] ?? '';
+        $message = isset($data['message']) ? base64_decode($data['message']) : '';
 
         if (!empty($data['to_admin'])) {
             $adminAddress = env('MAIL_TO_ADDRESS');
@@ -59,14 +59,26 @@ class SendEmailController extends Controller
                 return "no admin address configured";
             }
 
-            Mail::to($adminAddress)->send(new SetEmailData($subject, $message));
-
-            return "email sent successfully!";
+            try {
+                Mail::to($adminAddress)->send(new SetEmailData($subject, $message));
+                return "email sent successfully!";
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('SendEmailController to_admin error: ' . $e->getMessage());
+                return "email sending failed: " . $e->getMessage();
+            }
         }
 
-        $recipients = $data['recipients'];
-        Mail::to($recipients)->send(new SetEmailData($subject, $message));
-        return "email sent successfully!";
+        $recipients = $data['recipients'] ?? [];
+        if (!empty($recipients)) {
+            try {
+                Mail::to($recipients)->send(new SetEmailData($subject, $message));
+                return "email sent successfully!";
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('SendEmailController error: ' . $e->getMessage());
+                return "email sending failed: " . $e->getMessage();
+            }
+        }
+        return "no recipients";
     }
 }
 
