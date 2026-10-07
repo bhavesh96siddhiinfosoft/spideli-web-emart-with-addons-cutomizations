@@ -941,7 +941,7 @@ return [
     'order_history_period_bad_range' => 'The start date is after the end date.',
 
     /* 02#54: printing the order history for a period. */
-    'order_history_print' => 'Print',
+    'order_history_print' => 'Export PDF / Print',
     'order_history_print_title' => 'Order history',
     'order_history_print_customer' => 'Customer',
     'order_history_print_period' => 'Period',

@@ -854,7 +854,7 @@ return [
     'order_history_period_bad_range' => 'تاريخ البداية بعد تاريخ النهاية.',
 
     /* 02#54: printing the order history for a period. */
-    'order_history_print' => 'طباعة',
+    'order_history_print' => 'تصدير PDF / طباعة',
     'order_history_print_title' => 'سجل الطلبات',
     'order_history_print_customer' => 'العميل',
     'order_history_print_period' => 'الفترة',
