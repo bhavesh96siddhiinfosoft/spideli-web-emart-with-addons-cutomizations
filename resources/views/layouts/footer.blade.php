@@ -4219,6 +4219,137 @@
             : symbol + formatted;
     }
 
+    <?php
+        $platformCountriesJson = file_exists(public_path('countriesdata.json'))
+            ? file_get_contents(public_path('countriesdata.json'))
+            : '[]';
+    ?>
+    window.platformCountriesData = {!! $platformCountriesJson !!};
+
+    function normaliseCountry(value) {
+        return (value || '').toString().trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    /* Common multilingual / localized country aliases mapped to canonical countriesdata.json countryName */
+    var countryLocalizedAliases = {
+        'cameroun': 'Cameroon',
+        'cote d\'ivoire': 'Ivory Coast',
+        'cote d ivoire': 'Ivory Coast',
+        'cotedivoire': 'Ivory Coast',
+        'deutschland': 'Germany',
+        'espana': 'Spain',
+        'espagne': 'Spain',
+        'etats-unis': 'United States',
+        'etats unis': 'United States',
+        'inde': 'India',
+        'allemagne': 'Germany',
+        'royaume-uni': 'United Kingdom',
+        'royaume uni': 'United Kingdom',
+        'belgique': 'Belgium',
+        'suisse': 'Switzerland',
+        'italie': 'Italy',
+        'maroc': 'Morocco',
+        'senegal': 'Senegal',
+        'gabon': 'Gabon',
+        'tchad': 'Chad',
+        'guinee': 'Guinea',
+        'mali': 'Mali',
+        'niger': 'Niger',
+        'benin': 'Benin',
+        'togo': 'Togo',
+        'burkina faso': 'Burkina Faso',
+        'congo': 'Congo',
+        'republique democratique du congo': 'Congo, Democratic Republic of the'
+    };
+
+    /* Reverse aliases to find alternate spellings when querying Firestore */
+    var countryReverseAliases = {
+        'Cameroon': ['Cameroun'],
+        'Ivory Coast': ['Côte d\'Ivoire', 'Cote d\'Ivoire'],
+        'Germany': ['Deutschland', 'Allemagne'],
+        'Spain': ['España', 'Espagne'],
+        'United States': ['États-Unis', 'Etats-Unis']
+    };
+
+    function getCanonicalCountry(countryName, countryCode) {
+        var list = window.platformCountriesData || [];
+        var code = (countryCode || '').toString().trim().toUpperCase();
+        if (code && list.length) {
+            var byCode = list.find(function(c) {
+                return c.code && c.code.toUpperCase() === code;
+            });
+            if (byCode && byCode.countryName) {
+                return byCode.countryName;
+            }
+        }
+        var normName = normaliseCountry(countryName);
+        if (normName && list.length) {
+            var byName = list.find(function(c) {
+                return normaliseCountry(c.countryName) === normName;
+            });
+            if (byName && byName.countryName) {
+                return byName.countryName;
+            }
+        }
+        if (normName && countryLocalizedAliases[normName]) {
+            return countryLocalizedAliases[normName];
+        }
+        return countryName || '';
+    }
+
+    function getTaxCountryCandidates(countryName, countryCode) {
+        var rawName = countryName || getCookie('userCountryName') || '';
+        var rawCode = countryCode || getCookie('userCountryCode') || '';
+        var canonical = getCanonicalCountry(rawName, rawCode);
+        var candidates = [];
+        if (canonical) candidates.push(canonical);
+        if (rawName && candidates.indexOf(rawName) === -1) candidates.push(rawName);
+
+        if (canonical && countryReverseAliases[canonical]) {
+            countryReverseAliases[canonical].forEach(function(alias) {
+                if (candidates.indexOf(alias) === -1) candidates.push(alias);
+            });
+        }
+        return candidates.filter(Boolean);
+    }
+
+    (function sanitizeUserCountryCookie() {
+        var existingName = getCookie('userCountryName');
+        var existingCode = getCookie('userCountryCode');
+        if (existingName || existingCode) {
+            var canonical = getCanonicalCountry(existingName, existingCode);
+            if (canonical && canonical !== existingName) {
+                setCookie('userCountryName', canonical, 365);
+            }
+            if (existingCode && existingCode !== existingCode.toUpperCase()) {
+                setCookie('userCountryCode', existingCode.toUpperCase(), 365);
+            }
+        }
+    })();
+
+    /* If userCountryName cookie is not set yet, initialize from globalSettings defaultCountryCode */
+    if (!getCookie('userCountryName')) {
+        database.collection('settings').doc('globalSettings').get().then(function(snap) {
+            if (snap.exists) {
+                var gData = snap.data();
+                if (gData && gData.defaultCountryCode && !getCookie('userCountryName')) {
+                    var phoneCode = gData.defaultCountryCode.replace('+', '').trim();
+                    var list = window.platformCountriesData || [];
+                    var matched = list.find(function(c) {
+                        return c.phoneCode && c.phoneCode.toString().trim() === phoneCode;
+                    });
+                    if (matched) {
+                        setCookie('userCountryName', matched.countryName, 365);
+                        setCookie('userCountryCode', (matched.code || '').toUpperCase(), 365);
+                    }
+                }
+            }
+        }).catch(function(e) {
+            console.warn('Could not load default country from globalSettings:', e);
+        });
+    }
+
     /* Keeps the `userCountryName` cookie in step with the active address.
      * Every path that writes address_lat/address_lng calls this - the cookie
      * drives the tax lookup in ten views, so a stale value taxes a customer
@@ -4236,13 +4367,15 @@
         }
         try {
             var country = await lookupCountry(lat, lng);
-            if (country.name) {
-                setCookie('userCountryName', country.name, 365);
+            var canonicalName = getCanonicalCountry(country.name, country.code);
+            var finalName = canonicalName || country.name || '';
+            if (finalName) {
+                setCookie('userCountryName', finalName, 365);
             }
             if (country.code) {
-                setCookie('userCountryCode', country.code, 365);
+                setCookie('userCountryCode', country.code.toUpperCase(), 365);
             }
-            return country.name;
+            return finalName;
         } catch (err) {
             return '';
         }
@@ -4266,7 +4399,8 @@
 
     async function getCountryFromLatLng(lat, lng) {
         const country = await lookupCountry(lat, lng);
-        return country.name;
+        var canonical = getCanonicalCountry(country.name, country.code);
+        return canonical || country.name;
     }
 
     /* ---- Region detection ------------------------------------------------

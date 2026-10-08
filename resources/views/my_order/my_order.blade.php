@@ -230,10 +230,22 @@
     var taxSetting = [];
     const scopes = ['delivery', 'order', 'packaging', 'platform', 'product'];
     const taxesByScope = {};
-    database.collection('tax').where('country', '==', userCountry).where('enable', '==', true).where('scope', 'in', scopes).where('sectionId', '==', section_id).get().then(snapshot => {
-        snapshot.forEach(doc => {
-            const tax = doc.data();
-            (taxesByScope[tax.scope] ??= []).push(tax);
+    const taxCountryCandidates = (typeof getTaxCountryCandidates === 'function')
+        ? getTaxCountryCandidates(userCountry, getCookie('userCountryCode'))
+        : [userCountry].filter(Boolean);
+
+    Promise.all(taxCountryCandidates.map(c =>
+        database.collection('tax').where('country', '==', c).where('enable', '==', true).where('scope', 'in', scopes).where('sectionId', '==', section_id).get()
+    )).then(snapshots => {
+        const seenTaxIds = new Set();
+        snapshots.forEach(snapshot => {
+            snapshot.forEach(doc => {
+                if (!seenTaxIds.has(doc.id)) {
+                    seenTaxIds.add(doc.id);
+                    const tax = doc.data();
+                    (taxesByScope[tax.scope] ??= []).push(tax);
+                }
+            });
         });
     });
 
