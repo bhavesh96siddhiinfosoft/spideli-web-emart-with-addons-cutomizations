@@ -313,6 +313,16 @@
                     id = id + 'PV' + variant_info.variant_id;
                 }
                 
+                var delivery_charges = [];
+                try {
+                    var dcVal = jQuery(this).find('.delivery_charges').val();
+                    if (dcVal) {
+                        delivery_charges = JSON.parse(dcVal);
+                    }
+                } catch (e) {
+                    delivery_charges = [];
+                }
+
                 var item_arr = {
                     'id': id,
                     'name': name,
@@ -326,6 +336,7 @@
                     'variant_info': variant_info,
                     'category_id': category_id,
                     'taxSetting': taxSetting,
+                    'delivery_charges': delivery_charges,
                 }
                 item.push(item_arr);
             });
@@ -344,6 +355,24 @@
                 }
             });
 
+            var isDeliveryChargeCustomization = (getCookie('is_delivery_charge_customization') === 'true');
+            if (section_id) {
+                try {
+                    let secSnap = await database.collection('sections').doc(section_id).get();
+                    if (secSnap.exists) {
+                        let secData = secSnap.data();
+                        isDeliveryChargeCustomization = (
+                            secData.is_delivery_charge_customization === true ||
+                            secData.deliveryChargeCustomization === true ||
+                            secData.isDeliveryChargeCustomization === true
+                        );
+                        setCookie('is_delivery_charge_customization', isDeliveryChargeCustomization ? 'true' : 'false', 356);
+                    }
+                } catch (e) {
+                    console.error("Error checking section customization:", e);
+                }
+            }
+
             var vendor_name = jQuery(".resttitle_" + order_id).val();
             var vendor_location = jQuery(".restlocation_" + order_id).val();
             var vendor_latitude = jQuery(".restlatitude_" + order_id).val();
@@ -360,6 +389,7 @@
                 vendor_longitude,
                 item,
                 deliveryCharge,
+                is_delivery_charge_customization: isDeliveryChargeCustomization,
                 taxSetting,
                 decimal_degits,
                 distanceType,
@@ -912,6 +942,7 @@
                             html = html + '<input type="hidden" class="variant_info" value="' + btoa(JSON.stringify(val.products[i]['variant_info'])) + '">';
                         }
                         html = html + '<input type="hidden" class="category_id" value="' + val.products[i]['category_id'] + '">';
+                        html = html + '<input type="hidden" class="delivery_charges" value=\'' + JSON.stringify(val.products[i].delivery_charges || val.products[i].deliveryCharges || []) + '\'>';
                         html = html + '</div>';
                     }
                     
@@ -1162,6 +1193,7 @@
                             html = html + '<input type="hidden" class="variant_info" value="' + btoa(JSON.stringify(val.products[i]['variant_info'])) + '">';
                         }
                         html = html + '<input type="hidden" class="category_id" value="' + val.products[i]['category_id'] + '">';
+                        html = html + '<input type="hidden" class="delivery_charges" value=\'' + JSON.stringify(val.products[i].delivery_charges || val.products[i].deliveryCharges || []) + '\'>';
                         html = html + '</div>';
                     }
 
@@ -1385,6 +1417,7 @@
                             html = html + '<input type="hidden" class="variant_info" value="' + btoa(JSON.stringify(val.products[i]['variant_info'])) + '">';
                         }
                         html = html + '<input type="hidden" class="category_id" value="' + val.products[i]['category_id'] + '">';
+                        html = html + '<input type="hidden" class="delivery_charges" value=\'' + JSON.stringify(val.products[i].delivery_charges || val.products[i].deliveryCharges || []) + '\'>';
                         html = html + '</div>';
                     }
                     
@@ -1607,6 +1640,7 @@
                             html = html + '<input type="hidden" class="variant_info" value="' + btoa(JSON.stringify(val.products[i]['variant_info'])) + '">';
                         }
                         html = html + '<input type="hidden" class="category_id" value="' + val.products[i]['category_id'] + '">';
+                        html = html + '<input type="hidden" class="delivery_charges" value=\'' + JSON.stringify(val.products[i].delivery_charges || val.products[i].deliveryCharges || []) + '\'>';
                         html = html + '</div>';
                     }
                     

@@ -27,48 +27,18 @@ class CheckoutController extends Controller
         $user = VendorUsers::where('email', $email)->first();
         $cart = Session::get('cart', []);
         if (Session::get('takeawayOption') == "true") {
+            $cart['delivery_option'] = 'takeaway';
+            $cart['deliverycharge'] = 0;
+            $cart['deliveryCharge'] = 0;
+            $cart['tip_amount'] = 0;
         } else {
-            $deliveryChargemain = @$_COOKIE['deliveryChargemain'];
-            $address_lat = @$_COOKIE['address_lat'];
-            $address_lng = @$_COOKIE['address_lng'];
-            $vendor_latitude = @$_COOKIE['vendor_latitude'];
-            $vendor_longitude = @$_COOKIE['vendor_longitude'];
-            if (isset($_COOKIE['service_type']) && $_COOKIE['service_type'] == "Ecommerce Service" && isset($_COOKIE['ecommerce_delivery_charge'])) {
-                $cart['deliverychargemain'] = $_COOKIE['ecommerce_delivery_charge'];
-                $cart['deliverykm'] = '';
-            } else {
-                if (@$deliveryChargemain && @$address_lat && @$address_lng && @$vendor_latitude && @$vendor_longitude) {
-                    $deliveryChargemain = json_decode($deliveryChargemain);
-                    if (!empty($deliveryChargemain)) {
-                        if (! empty($cart['distanceType'])) {
-                            $distanceType = $cart['distanceType'];
-                        } else {
-                            $distanceType = 'Km';
-                        }
-                        $delivery_charges_per_km = $deliveryChargemain->delivery_charges_per_km;
-                        $minimum_delivery_charges = $deliveryChargemain->minimum_delivery_charges;
-                        $minimum_delivery_charges_within_km = $deliveryChargemain->minimum_delivery_charges_within_km;
-                        $kmradius = $this->distance($address_lat, $address_lng, $vendor_latitude, $vendor_longitude, $distanceType);
-                        if ($minimum_delivery_charges_within_km > $kmradius) {
-                            $cart['deliverychargemain'] = $minimum_delivery_charges;
-                        } else {
-                            $cart['deliverychargemain'] = round(($kmradius * $delivery_charges_per_km), 2);
-                        }
-                        $cart['deliverykm'] = $kmradius;
-                    }
-                }
-            }
-            if (@$cart['isSelfDelivery'] === true || @$cart['isSelfDelivery'] === "true") {
-                $cart['deliverycharge'] = 0;
-            } else {
-                $cart['deliverycharge'] = @$cart['deliverychargemain'];
-            }
-            
-            $cart = $this->calculateTax($cart);
-            
-            Session::put('cart', $cart);
-            Session::save();
+            $this->recalculateCartDeliveryCharge($cart);
         }
+        
+        $cart = $this->calculateTax($cart);
+        
+        Session::put('cart', $cart);
+        Session::save();
         
         return view('checkout.checkout', ['is_checkout' => 1, 'cart' => $cart, 'id' => $user->uuid, 'errorMessage' => Session::get('payment_error', '')]);
     }
@@ -890,5 +860,105 @@ class CheckoutController extends Controller
         }  else {
             return $miles;
         }
+    }
+
+    public function recalculateCartDeliveryCharge(&$cart)
+    {
+        $address_lat = @$_COOKIE['address_lat'];
+        $address_lng = @$_COOKIE['address_lng'];
+        $vendor_latitude = $cart['vendor_latitude'] ?? @$_COOKIE['vendor_latitude'];
+        $vendor_longitude = $cart['vendor_longitude'] ?? @$_COOKIE['vendor_longitude'];
+        $distanceType = $cart['distanceType'] ?? @$_COOKIE['distanceType'] ?? 'km';
+        $selfDelivery = filter_var($cart['isSelfDelivery'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        $isCustomization = filter_var(
+            $cart['is_delivery_charge_customization'] ?? (@$_COOKIE['is_delivery_charge_customization'] === 'true'),
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        if ($isCustomization) {
+            $kmradius = 0;
+            if ($address_lat && $address_lng && $vendor_latitude && $vendor_longitude) {
+                $kmradius = $this->distance($address_lat, $address_lng, $vendor_latitude, $vendor_longitude, $distanceType);
+            }
+            $cart['deliverykm'] = $kmradius;
+
+            // Maximum delivery charge among products in cart
+            $maxDeliveryCharge = null;
+            if (!empty($cart['item']) && is_array($cart['item'])) {
+                foreach ($cart['item'] as $vId => $items) {
+                    if (is_array($items)) {
+                        foreach ($items as $pId => $itemData) {
+                            $tiers = $itemData['delivery_charges'] ?? [];
+                            if (!empty($tiers) && is_array($tiers)) {
+                                $itemCharge = $this->calculateTierDeliveryCharge($tiers, $kmradius);
+                                if ($maxDeliveryCharge === null || $itemCharge > $maxDeliveryCharge) {
+                                    $maxDeliveryCharge = $itemCharge;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($maxDeliveryCharge !== null) {
+                $cart['deliverychargemain'] = round($maxDeliveryCharge, 2);
+            } else {
+                $cart['deliverychargemain'] = 0;
+            }
+        } else {
+            // Global setting (Screenshot 1) / flat ecommerce delivery charge
+            if (isset($_COOKIE['service_type']) && $_COOKIE['service_type'] == "Ecommerce Service" && isset($_COOKIE['ecommerce_delivery_charge'])) {
+                $cart['deliverychargemain'] = @$_COOKIE['ecommerce_delivery_charge'];
+                $cart['deliverykm'] = '';
+            } else {
+                $deliveryChargemain = @$_COOKIE['deliveryChargemain'];
+                if (@$deliveryChargemain && @$address_lat && @$address_lng && @$vendor_latitude && @$vendor_longitude) {
+                    $deliveryChargemain = json_decode($deliveryChargemain);
+                    if (!empty($deliveryChargemain)) {
+                        $delivery_charges_per_km = (float)($deliveryChargemain->delivery_charges_per_km ?? 0);
+                        $minimum_delivery_charges = (float)($deliveryChargemain->minimum_delivery_charges ?? 0);
+                        $minimum_delivery_charges_within_km = (float)($deliveryChargemain->minimum_delivery_charges_within_km ?? 0);
+                        $kmradius = $this->distance($address_lat, $address_lng, $vendor_latitude, $vendor_longitude, $distanceType);
+                        if ($minimum_delivery_charges_within_km >= $kmradius) {
+                            $cart['deliverychargemain'] = $minimum_delivery_charges;
+                        } else {
+                            $cart['deliverychargemain'] = round(($kmradius * $delivery_charges_per_km), 2);
+                        }
+                        $cart['deliverykm'] = $kmradius;
+                    }
+                }
+            }
+        }
+
+        $cart['delivery_option'] = Session::get('takeawayOption') === "true" ? "takeaway" : ($cart['delivery_option'] ?? "delivery");
+        $cart['deliverycharge'] = ($cart['delivery_option'] === 'delivery' && !$selfDelivery) ? ($cart['deliverychargemain'] ?? 0) : 0;
+        $cart['deliveryCharge'] = $cart['deliverycharge'];
+    }
+
+    public function calculateTierDeliveryCharge($tiers, $kmradius)
+    {
+        if (empty($tiers) || !is_array($tiers)) {
+            return 0;
+        }
+
+        // Sort tiers by minimum_delivery_charges_within_km ascending
+        usort($tiers, function ($a, $b) {
+            $aWithin = (float)($a['minimum_delivery_charges_within_km'] ?? $a['minimumDeliveryChargesWithinKm'] ?? 0);
+            $bWithin = (float)($b['minimum_delivery_charges_within_km'] ?? $b['minimumDeliveryChargesWithinKm'] ?? 0);
+            return $aWithin <=> $bWithin;
+        });
+
+        foreach ($tiers as $tier) {
+            $withinKm = (float)($tier['minimum_delivery_charges_within_km'] ?? $tier['minimumDeliveryChargesWithinKm'] ?? 0);
+            $minCharge = (float)($tier['minimum_delivery_charges'] ?? $tier['minimumDeliveryCharges'] ?? 0);
+            if ($kmradius <= $withinKm) {
+                return $minCharge;
+            }
+        }
+
+        $lastTier = end($tiers);
+        $perKm = (float)($lastTier['delivery_charges_per_km'] ?? $lastTier['deliveryChargesPerKm'] ?? 0);
+        return round($kmradius * $perKm, 2);
     }
 }

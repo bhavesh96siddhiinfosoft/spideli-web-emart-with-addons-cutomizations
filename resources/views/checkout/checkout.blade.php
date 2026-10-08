@@ -916,7 +916,8 @@
                                     };
                                 });
                             }
-                            
+                            let itemDeliveryCharges = (cart.item && cart.item[vendorID] && cart.item[vendorID][item_id] && cart.item[vendorID][item_id].delivery_charges) ? cart.item[vendorID][item_id].delivery_charges : [];
+
                             products.push({
                                 'id': product_id,
                                 'name': name,
@@ -938,6 +939,7 @@
                                 'variant_info': variant_info,
                                 'category_id': category_id,
                                 'taxSetting': taxSettingConvert,
+                                'delivery_charges': itemDeliveryCharges,
                             })
                         });
 

@@ -234,10 +234,18 @@
     
     var isProductDetails = false;
     var sectionData = '';
+    var isDeliveryChargeCustomization = false;
     database.collection("sections").doc(section_id).get().then(function (sectionSnapshot) {
         if (sectionSnapshot.exists) {
             sectionData = sectionSnapshot.data();           
             isProductDetails = sectionData.is_product_details === true;
+            isDeliveryChargeCustomization = (
+                sectionData.is_delivery_charge_customization === true ||
+                sectionData.is_delivery_charge_customization === 'true' ||
+                sectionData.deliveryChargeCustomization === true ||
+                sectionData.isDeliveryChargeCustomization === true
+            );
+            setCookie('is_delivery_charge_customization', isDeliveryChargeCustomization ? 'true' : 'false', 356);
         }
     });
 
@@ -287,6 +295,16 @@
             var item_price = (dis_price > 0) ? dis_price : price;
 
             var stock_quantity = $('#quantity_' + id).val();
+
+            var delivery_charges = [];
+            var delivery_charges_val = $('#delivery_charges_' + id).val();
+            if (delivery_charges_val) {
+                try {
+                    delivery_charges = JSON.parse(delivery_charges_val);
+                } catch (e) {
+                    delivery_charges = [];
+                }
+            }
 
             /* The quantity break travels with the line so the cart can
              * reprice it when the quantity changes, not only now. The
@@ -395,14 +413,21 @@
             var vendor_longitude = $('input[name="vendor_longitude"]').val();
             setCookie('vendor_longitude', vendor_longitude, 365);
             setCookie('vendor_latitude', vendor_latitude, 365);
-            if (getCookie('service_type') == "Ecommerce Service") {
-                await database.collection('sections').doc(section_id).get().then(async function (deliveryChargeSnapshots) {
-                    var ecommerce_delivery_charge_data = deliveryChargeSnapshots.data();
-                    ecommerce_delivery_charge = ecommerce_delivery_charge_data.delivery_charge;
-                });
-                setCookie('ecommerce_delivery_charge', ecommerce_delivery_charge, 356);
+            if (isDeliveryChargeCustomization) {
+                setCookie('is_delivery_charge_customization', 'true', 356);
+                setCookie('ecommerce_delivery_charge', '', -1);
+                setCookie('deliveryChargemain', '', -1);
+            } else {
+                setCookie('is_delivery_charge_customization', 'false', 356);
+                if (getCookie('service_type') == "Ecommerce Service") {
+                    await database.collection('sections').doc(section_id).get().then(async function (deliveryChargeSnapshots) {
+                        var ecommerce_delivery_charge_data = deliveryChargeSnapshots.data();
+                        ecommerce_delivery_charge = ecommerce_delivery_charge_data.delivery_charge;
+                    });
+                    setCookie('ecommerce_delivery_charge', ecommerce_delivery_charge, 356);
+                }
+                setCookie('deliveryChargemain', JSON.stringify(deliveryChargemain), 356);
             }
-            setCookie('deliveryChargemain', JSON.stringify(deliveryChargemain), 356);
             var vendor_location = $('input[name="vendor_location"]').val();
             var vendor_image = $('input[name="vendor_image"]').val();
             var delivery_option = $('input[name="delivery_option"]').val();
@@ -447,6 +472,8 @@
                 specialOfferForHour,
                 decimal_degits,
                 distanceType,
+                delivery_charges: delivery_charges,
+                is_delivery_charge_customization: isDeliveryChargeCustomization,
                 isSelfDelivery: (isSelfDeliveryByVendor && isSelfDeliveryGlobally) ? true : false,
             };
 
@@ -1741,6 +1768,8 @@
             html += '<input type="hidden" id="sale_type_' + vendorProduct.id + '" value="' + sale_type + '">';
             html += '<input type="hidden" id="wholesale_business_only_' + vendorProduct.id + '" value="' + wholesale_business_only + '">';
             html += '<input type="hidden" id="min_order_qty_' + vendorProduct.id + '" value="' + min_order_qty + '">';
+            var product_delivery_charges = vendorProduct.delivery_charges || vendorProduct.deliveryCharges || [];
+            html += '<input type="hidden" id="delivery_charges_' + vendorProduct.id + '" value=\'' + JSON.stringify(product_delivery_charges) + '\'>';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block booknow' >{{trans('lang.book_now')}}</button>";
             html = html + '<div class="description mt-2 mb-3">';
             html = html + '</div>';
