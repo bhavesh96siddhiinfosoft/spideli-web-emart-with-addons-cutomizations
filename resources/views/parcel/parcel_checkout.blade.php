@@ -942,6 +942,9 @@ session_start();
 
             $("#overlay").show();
 
+            var sendReceiverSms = $('#notify_receiver_sms').is(':checked') ? true : false;
+            var smsCharge = sendReceiverSms ? (parseFloat($('#parcel_sms_fee_val').val()) || 0) : 0;
+
             if (payment_method == "razorpay") {
 
                 var razorpayKey = $("#razorpayKey").val();
@@ -987,6 +990,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1055,6 +1060,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1131,6 +1138,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1201,6 +1210,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1273,6 +1284,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1345,6 +1358,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1416,6 +1431,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1490,6 +1507,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1558,6 +1577,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1587,8 +1608,6 @@ session_start();
                 var orangepay_clientId = $("#orangepay_clientId").val();
                 var orangepay_clientSecret = $("#orangepay_clientSecret").val();
                 var orangepay_merchantKey = $("#orangepay_merchantKey").val();
-                var sendReceiverSms = $('#notify_receiver_sms').is(':checked');
-                var smsCharge = sendReceiverSms ? (parseFloat($('#parcel_sms_fee_val').val()) || 50) : 0;
                 var order_json = {
                     authorID: authorID,
                     id: id_order,
@@ -1633,6 +1652,8 @@ session_start();
                     taxScope: taxScope,
                     platformFee: platformCharge,
                     platformTax: platformTax,
+                    sendReceiverSms: sendReceiverSms,
+                    smsCharge: smsCharge,
                 };
                 $.ajax({
                     type: 'POST',
@@ -1738,8 +1759,8 @@ session_start();
                     'taxScope': taxScope,
                     'platformFee': platformCharge,
                     'platformTax': platformTax,
-                    'sendReceiverSms': sendReceiverSms,
-                    'smsCharge': smsCharge,
+                    'sendReceiverSms': sendReceiverSms ? true : false,
+                    'smsCharge': sendReceiverSms ? (parseFloat(smsCharge) || 0) : 0,
                 }).then(function (result) {
 
                     $.ajax({
