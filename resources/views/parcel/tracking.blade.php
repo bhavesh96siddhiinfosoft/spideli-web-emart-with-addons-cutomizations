@@ -163,6 +163,10 @@
         <div class="track-card">
             <span id="track_status" class="track-status-pill"></span>
             <span id="track_status_date" class="text-muted small ml-2"></span>
+            <div class="text-muted small mt-2">
+                <i class="fa fa-circle" style="color:#28a745;font-size:8px;vertical-align:middle;"></i>
+                {{ trans('lang.parcel_tracking_live') }} &middot; {{ trans('lang.parcel_tracking_checked') }} <span id="track_checked"></span>
+            </div>
 
             <div id="track_steps_wrap">
                 <div class="track-steps">
@@ -182,6 +186,10 @@
                     <div class="track-label">{{ trans('lang.date') }}</div>
                     <div class="track-value" id="track_created"></div>
                 </div>
+                <div class="col-12 mb-3" id="track_number_wrap" style="display:none;">
+                    <div class="track-label">{{ trans('lang.parcel_tracking_number') }}</div>
+                    <div class="track-value" id="track_number"></div>
+                </div>
                 <div class="col-6">
                     <div class="track-label">{{ trans('lang.sender') }}</div>
                     <div class="track-value" id="track_sender"></div>
@@ -191,6 +199,13 @@
                     <div class="track-value" id="track_receiver"></div>
                 </div>
             </div>
+        </div>
+
+        {{-- The dated history the apps record (trackingEvents). Only the step
+             and its time are shown - never who did it or where they were. --}}
+        <div class="track-card" id="track_history_wrap" style="display:none;">
+            <h6 class="font-weight-bold mb-3">{{ trans('lang.parcel_tracking_history') }}</h6>
+            <ul class="list-unstyled mb-0" id="track_history"></ul>
         </div>
 
         <div class="track-card">
@@ -232,20 +247,29 @@
 
     var STOPPED = ['Order Cancelled', 'Order Rejected', 'Driver Rejected'];
 
+    /* LIVE, not read once (Document 1: "real-time shipment status tracking via
+     * the QR code"). The page used to read the parcel when it opened, so the
+     * person at the door had to refresh to see it move. It now listens: every
+     * status the driver or the admin sets appears here by itself. */
     $(document).ready(function () {
-        database.collection('parcel_orders').doc(parcelId).get().then(function (doc) {
+        database.collection('parcel_orders').doc(parcelId).onSnapshot(function (doc) {
             $('#track_loading').hide();
 
             if (!doc.exists) {
+                $('#track_body').hide();
                 $('#track_missing').show();
                 return;
             }
 
+            $('#track_missing').hide();
             render(doc.data());
-        }).catch(function (err) {
+            $('#track_checked').text(new Date().toLocaleTimeString());
+        }, function (err) {
             console.error('parcel could not be read', err);
             $('#track_loading').hide();
-            $('#track_missing').show();
+            if (!$('#track_body').is(':visible')) {
+                $('#track_missing').show();
+            }
         });
     });
 
@@ -262,6 +286,9 @@
         }
 
         $('#track_order_id').text('#' + (order.id || parcelId));
+        $('#track_number').text(order.trackingNumber || '');
+        $('#track_number_wrap').toggle(!!order.trackingNumber);
+        drawHistory(order.trackingEvents);
         $('#track_sender').text(nameOf(order.sender));
         $('#track_receiver').text(nameOf(order.receiver));
 
@@ -278,6 +305,7 @@
              * on its way. */
             $('#track_steps_wrap').hide();
         } else {
+            $('#track_steps_wrap').show();
             drawSteps(status);
         }
 
@@ -298,6 +326,10 @@
             reached = 0;
         }
 
+        /* Drawn again on every update - clear the previous steps first, but
+         * keep the progress line, which is part of the markup. */
+        $('.track-steps .track-step').remove();
+
         var html = '';
         TRACK_STEPS.forEach(function (step, index) {
             var done = index <= reached ? ' done' : '';
@@ -311,6 +343,48 @@
 
         var span = TRACK_STEPS.length > 1 ? (reached / (TRACK_STEPS.length - 1)) : 0;
         $('#track_progress').css('width', (84 * span) + '%');
+    }
+
+    /* The app's own step names, in plain words. A step not listed here is
+     * shown as the app wrote it rather than hidden. */
+    var HISTORY_LABELS = {
+        'Created': "{{ trans('lang.parcel_step_registered') }}",
+        'Driver Assigned': "{{ trans('lang.parcel_history_driver_assigned') }}",
+        'Collected': "{{ trans('lang.parcel_step_picked_up') }}",
+        'In Transit': "{{ trans('lang.parcel_step_in_transit') }}",
+        'Delivered': "{{ trans('lang.parcel_step_delivered') }}"
+    };
+
+    function drawHistory(events) {
+        var list = Array.isArray(events) ? events.slice() : [];
+        var when = function (e) {
+            var at = e && e.at;
+            if (at && typeof at.toDate === 'function') return at.toDate();
+            var d = at ? new Date(at) : null;
+            return (d && !isNaN(d.getTime())) ? d : null;
+        };
+        list = list.filter(function (e) { return e && e.status; });
+        list.sort(function (a, b) {
+            var x = when(a), y = when(b);
+            return (x ? x.getTime() : 0) - (y ? y.getTime() : 0);
+        });
+
+        var $ul = $('#track_history').empty();
+        /* Newest first - the question at the door is "where is it NOW". */
+        list.reverse().forEach(function (e, index) {
+            var d = when(e);
+            var label = HISTORY_LABELS[e.status] || String(e.status);
+            $ul.append(
+                $('<li class="d-flex mb-2">').append(
+                    $('<i class="fa fa-circle mr-2 mt-1">').css({fontSize: '9px', color: index === 0 ? '#28a745' : '#adb5bd'}),
+                    $('<div>').append(
+                        $('<div class="track-value">').text(label),
+                        $('<div class="text-muted small">').text(d ? d.toLocaleString() : '')
+                    )
+                )
+            );
+        });
+        $('#track_history_wrap').toggle(list.length > 0);
     }
 
     function nameOf(party) {

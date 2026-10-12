@@ -20,4 +20,31 @@
 
         return fields;
     }
+
+    /* Parcel tracking (Document 1) - the fields the APP writes on every parcel
+     * since 24 Sep, so a parcel booked on this site is tracked the same way:
+     *   qrValue         the public tracking page (the app has written this
+     *                   same URL since 5 Oct, so app and site agree)
+     *   trackingNumber  SPD-YYMMDD-XXXXXX, as the app makes it
+     *   parcelStatus    'Created' - the app's own step name
+     *   trackingEvents  the dated history; the driver / owner apps append to it
+     * `at` is a plain date: a server timestamp is not allowed inside an array. */
+    function parcelTrackingFields(orderId, authorId) {
+        var now = new Date();
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        var suffix = '';
+        var random = new Uint32Array(6);
+        (window.crypto || window.msCrypto).getRandomValues(random);
+        for (var i = 0; i < 6; i++) {
+            suffix += chars.charAt(random[i] % chars.length);
+        }
+
+        return {
+            qrValue: "{{ route('parcel_tracking', ':id') }}".replace(':id', orderId),
+            trackingNumber: 'SPD-' + String(now.getFullYear()).slice(-2) + pad(now.getMonth() + 1) + pad(now.getDate()) + '-' + suffix,
+            parcelStatus: 'Created',
+            trackingEvents: [{ status: 'Created', role: 'customer', by: authorId || '', at: now }]
+        };
+    }
 </script>

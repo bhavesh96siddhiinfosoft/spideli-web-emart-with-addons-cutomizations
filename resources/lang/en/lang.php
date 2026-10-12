@@ -1111,4 +1111,15 @@ return [
     /* Point 41: sender and receiver addresses from Google. */
     'parcel_sender_address_not_found' => 'We could not find the sender address. Please choose it from the suggestions as you type.',
     'parcel_receiver_address_not_found' => 'We could not find the receiver address. Please choose it from the suggestions as you type.',
+    'parcel_tracking_live' => 'Updates automatically',
+    'parcel_tracking_checked' => 'last checked',
+    'parcel_track_button' => 'Track / QR',
+    'parcel_track_modal_title' => 'Track this parcel',
+    'parcel_track_modal_help' => 'Scan this code or share the link to follow the parcel. It shows the status, not the full address or phone number.',
+    'parcel_track_copy' => 'Copy link',
+    'parcel_track_copied' => 'Link copied',
+    'parcel_track_open' => 'Open tracking page',
+    'parcel_tracking_number' => 'Tracking number',
+    'parcel_tracking_history' => 'History',
+    'parcel_history_driver_assigned' => 'Driver assigned',
 ];

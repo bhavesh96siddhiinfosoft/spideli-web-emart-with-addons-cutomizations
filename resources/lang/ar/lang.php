@@ -926,4 +926,15 @@ return [
     /* Point 41: sender and receiver addresses from Google. */
     'parcel_sender_address_not_found' => 'تعذر العثور على عنوان المرسل. يرجى اختياره من الاقتراحات أثناء الكتابة.',
     'parcel_receiver_address_not_found' => 'تعذر العثور على عنوان المستلم. يرجى اختياره من الاقتراحات أثناء الكتابة.',
+    'parcel_tracking_live' => 'يتم التحديث تلقائيًا',
+    'parcel_tracking_checked' => 'آخر تحقق',
+    'parcel_track_button' => 'تتبع / QR',
+    'parcel_track_modal_title' => 'تتبع هذا الطرد',
+    'parcel_track_modal_help' => 'امسح هذا الرمز أو شارك الرابط لمتابعة الطرد. يعرض الحالة فقط، وليس العنوان الكامل أو رقم الهاتف.',
+    'parcel_track_copy' => 'نسخ الرابط',
+    'parcel_track_copied' => 'تم نسخ الرابط',
+    'parcel_track_open' => 'فتح صفحة التتبع',
+    'parcel_tracking_number' => 'رقم التتبع',
+    'parcel_tracking_history' => 'السجل',
+    'parcel_history_driver_assigned' => 'تم تعيين السائق',
 ];

@@ -189,6 +189,8 @@
                         ...p41OrderFields(cart,
                             (parseFloat(cart.total_pay) || 0) + (order_json.sendReceiverSms ? (parseFloat(order_json.smsCharge) || 0) : 0),
                             order_json.sendReceiverSms ? order_json.smsCharge : 0),
+                        /* Parcel tracking - QR, tracking number, history (as the app) */
+                        ...parcelTrackingFields(id_order, order_json.authorID),
                     }).then(function (result) {
                         $.ajax({
                             type: 'POST',

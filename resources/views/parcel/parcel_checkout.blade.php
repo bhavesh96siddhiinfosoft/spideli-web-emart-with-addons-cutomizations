@@ -1805,6 +1805,8 @@ session_start();
                     'smsCharge': sendReceiverSms ? (parseFloat(smsCharge) || 0) : 0,
                     /* Point 41: the app's fields - see parcel/partials/order_fields_js */
                     ...p41OrderFields(cart, total_pay, sendReceiverSms ? smsCharge : 0),
+                    /* Parcel tracking - QR, tracking number, history (as the app) */
+                    ...parcelTrackingFields(id_order, authorID),
                 }).then(function (result) {
 
                     $.ajax({

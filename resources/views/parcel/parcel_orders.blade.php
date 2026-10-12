@@ -240,6 +240,63 @@
         };
     }
 
+    /* ---- The parcel's tracking QR, on screen -------------------------------
+     * Until 12 Oct the QR existed only inside the downloaded PDF receipt. Now
+     * each parcel also has a "Track / QR" button: the same QR, the link it
+     * carries, and a way to open or copy it - to show the receiver, print, or
+     * send. The QR is the SAME value as the receipt's (qrValue), so a code
+     * scanned from either opens the same public tracking page. */
+    function parcelTrackUrl(id) {
+        return "{{ route('parcel_tracking', ':id') }}".replace(':id', id);
+    }
+
+    function parcelTrackButton(id) {
+        return '<button type="button" class="btn btn-outline-secondary btn-sm ml-2 parcel-track-btn" data-track-id="' + id + '">' +
+            '<i class="fa fa-qrcode mr-1"></i>{{ trans('lang.parcel_track_button') }}</button>';
+    }
+
+    $(document).on('click', '.parcel-track-btn', function () {
+        var id = $(this).data('track-id');
+        var url = parcelTrackUrl(id);
+        if (!$('#parcelTrackModal').length) {
+            $('body').append(
+                '<div class="modal fade" id="parcelTrackModal" tabindex="-1" role="dialog" aria-hidden="true">' +
+                '<div class="modal-dialog modal-dialog-centered" role="document"><div class="modal-content">' +
+                '<div class="modal-header"><h5 class="modal-title">{{ trans('lang.parcel_track_modal_title') }}</h5>' +
+                '<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>' +
+                '<div class="modal-body text-center">' +
+                '<div id="parcelTrackQr" class="d-inline-block p-2 bg-white"></div>' +
+                '<div class="small text-muted mt-2" id="parcelTrackOrder"></div>' +
+                '<p class="small text-muted mt-3 mb-2">{{ trans('lang.parcel_track_modal_help') }}</p>' +
+                '<input type="text" class="form-control form-control-sm text-center" id="parcelTrackLink" readonly>' +
+                '</div>' +
+                '<div class="modal-footer justify-content-center">' +
+                '<button type="button" class="btn btn-outline-secondary btn-sm" id="parcelTrackCopy"><i class="fa fa-copy mr-1"></i>{{ trans('lang.parcel_track_copy') }}</button>' +
+                '<a class="btn btn-primary btn-sm" id="parcelTrackOpen" target="_blank" rel="noopener"><i class="fa fa-external-link mr-1"></i>{{ trans('lang.parcel_track_open') }}</a>' +
+                '</div></div></div></div>');
+        }
+        var qr = (typeof receiptQrDataUrl === 'function') ? receiptQrDataUrl(url) : null;
+        $('#parcelTrackQr').html(qr ? '<img src="' + qr + '" width="180" height="180" alt="QR">' : '');
+        $('#parcelTrackOrder').text('#' + id);
+        $('#parcelTrackLink').val(url);
+        $('#parcelTrackOpen').attr('href', url);
+        $('#parcelTrackCopy').html('<i class="fa fa-copy mr-1"></i>{{ trans('lang.parcel_track_copy') }}');
+        $('#parcelTrackModal').modal('show');
+    });
+
+    $(document).on('click', '#parcelTrackCopy', function () {
+        var input = document.getElementById('parcelTrackLink');
+        var done = function () {
+            $('#parcelTrackCopy').html('<i class="fa fa-check mr-1"></i>{{ trans('lang.parcel_track_copied') }}');
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(input.value).then(done);
+        } else {
+            input.select();
+            try { document.execCommand('copy'); done(); } catch (e) { }
+        }
+    });
+
     /* Handed to the receipt partial when its button names an order. */
     window.resolveOrderReceipt = function (id) {
         return parcelReceipts[id] || null;
@@ -518,7 +575,7 @@
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
-                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button></div>';
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';
@@ -711,7 +768,7 @@
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
-                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button></div>';
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';
@@ -890,7 +947,7 @@
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
-                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button></div>';
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';
