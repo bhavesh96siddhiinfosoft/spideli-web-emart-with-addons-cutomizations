@@ -42,9 +42,25 @@ class ParcelController extends Controller
 
     public function parcelCheckout()
     {
+        $parcel_cart = Session::get('parcel_cart', []);
+
+        /* No parcel to pay for - back to the booking form, never a crash.
+         *
+         * The checkout used to assume a filled cart and failed with
+         * "Undefined array key parcelDeliveryCharge" whenever it had none:
+         * opened directly or in a new session; REFRESHED AFTER AN ORDER
+         * (parcelOrderComplete() empties the cart on purpose); or reached
+         * after the booking form said no delivery was available (parcelCart()
+         * clears the cart before pricing). */
+        if (!is_array($parcel_cart) || !array_key_exists('parcelDeliveryCharge', $parcel_cart)) {
+            $categoryId = Session::get('parcel_last_category', '');
+            return $categoryId !== ''
+                ? redirect()->route('parcel', $categoryId)
+                : redirect(url('/'));
+        }
+
         $email = Auth::user()->email;
         $user = VendorUsers::where('email', $email)->first();
-        $parcel_cart = Session::get('parcel_cart', []);
         return view('parcel.parcel_checkout', ['parcel_cart' => $parcel_cart, 'id' => $user->uuid, 'errorMessage' => Session::get('payment_error', '')]);
     }
 
@@ -57,6 +73,9 @@ class ParcelController extends Controller
         $parcel_cart = Session::get('parcel_cart', []);
 
         $parcelCategoryId = $req['parcelCategoryId'];
+        /* Remembered so an empty checkout can send the customer back to the
+           right booking form - see parcelCheckout(). */
+        Session::put('parcel_last_category', (string) $parcelCategoryId);
         $section_id = $req['section_id'];
         $parcelType = $req['parcelType'];
         $senderAddress = $req['senderAddress'];
