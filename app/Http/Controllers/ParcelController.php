@@ -15,6 +15,7 @@ use Xendit\XenditSdkException;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
 use App\Helpers\FirestoreHelper;
+use App\Services\ParcelPricing;
 
 class ParcelController extends Controller
 {
@@ -80,18 +81,20 @@ class ParcelController extends Controller
         
         $parcelDeliveryCharge = 0;
         $kmradius = 0;
-        if (@$delivery_charge && @$sender_address_lng && @$sender_address_lat && @$receiver_address_lng && @$receiver_address_lat) {
+        /* Point 41: the distance is needed for every option now, not only the
+         * weight-band price, so it is worked out whenever both ends are known. */
+        if (@$sender_address_lng && @$sender_address_lat && @$receiver_address_lng && @$receiver_address_lat) {
+            $mapType = $req['mapType'] ?? 'google';
+            if($mapType == 'google'){
+                $kmradius = $this->distance($sender_address_lat, $sender_address_lng, $receiver_address_lat, $receiver_address_lng, );
+            }else{
+                $kmradius = $this->getDrivingDistance($sender_address_lat, $sender_address_lng, $receiver_address_lat, $receiver_address_lng);
+            }
             if (!empty($delivery_charge)) {
-                $mapType = $req['mapType'] ?? 'google';
-                if($mapType == 'google'){
-                    $kmradius = $this->distance($sender_address_lat, $sender_address_lng, $receiver_address_lat, $receiver_address_lng, );
-                }else{
-                    $kmradius = $this->getDrivingDistance($sender_address_lat, $sender_address_lng, $receiver_address_lat, $receiver_address_lng);
-                }
                 $parcelDeliveryCharge = round($kmradius * $delivery_charge);
             }
         }
-        
+
         $parcel_cart['parcelDeliveryCharge'] = $parcelDeliveryCharge;
         $parcel_cart['parcelDeliveryKM'] = $kmradius;
         $parcel_cart['decimal_degits'] = $req['decimal_degits'] ?? 2;
@@ -128,6 +131,25 @@ class ParcelController extends Controller
         $parcel_cart['receiverPickupDateTime'] = $req['receiverPickupDateTime'];
         $parcel_cart['decimal_degits'] = $req['decimal_degits'];
 
+        /* ---- Point 41: what the app asks, and every price the customer can
+         * choose from. See App\Services\ParcelPricing. ------------------- */
+        $parcel_cart['parcelDetails'] = $this->parcelDetailsFromRequest($req);
+        $quotes = $this->parcelQuotes($parcel_cart, $kmradius);
+
+        if (empty($quotes)) {
+            /* Nothing can take this parcel - e.g. "Other country" in a region
+             * with no carrier that delivers abroad. Said plainly, rather than
+             * a checkout with nothing to pay for. */
+            echo json_encode([
+                'status' => false,
+                'message' => trans('lang.parcel_no_option_available'),
+            ]);
+            exit;
+        }
+
+        $parcel_cart['parcelQuotes'] = $quotes;
+        $parcel_cart = $this->applyParcelQuote($parcel_cart, $quotes[0]);
+
         $parcel_cart = $this->calculateTax($parcel_cart);
 
         Session::put('parcel_cart', $parcel_cart);
@@ -138,6 +160,139 @@ class ParcelController extends Controller
         $res = array('status' => true, 'html' => view('parcel.parcel_checkout', ['parcel_cart' => $parcel_cart, 'id' => $user->uuid])->render());
         echo json_encode($res);
         exit;
+    }
+
+    /* Point 41 - the customer changes carrier on the checkout. Only a quote
+     * already worked out on the server for this cart can be chosen, so the
+     * browser never sends a price. */
+    public function selectParcelCarrier(Request $request)
+    {
+        $parcel_cart = Session::get('parcel_cart', []);
+        $key = (string) $request->input('key', '');
+
+        foreach ($parcel_cart['parcelQuotes'] ?? [] as $quote) {
+            if (($quote['key'] ?? null) === $key) {
+                $parcel_cart = $this->applyParcelQuote($parcel_cart, $quote);
+                $parcel_cart = $this->calculateTax($parcel_cart);
+                Session::put('parcel_cart', $parcel_cart);
+                Session::save();
+
+                return response()->json(['status' => true]);
+            }
+        }
+
+        return response()->json(['status' => false], 422);
+    }
+
+    /* The parcel details the app asks for, cleaned. Nothing here is trusted
+     * as a price - only as a description of the parcel. */
+    private function parcelDetailsFromRequest(array $req): array
+    {
+        $num = function ($value) {
+            $n = ParcelPricing::num($value);
+            return ($n !== null && $n > 0) ? $n : null;
+        };
+        $method = function ($value) {
+            return in_array($value, ParcelPricing::METHODS, true) ? $value : 'home';
+        };
+        $place = function ($value) {
+            $value = is_array($value) ? $value : [];
+            return [
+                'city' => trim((string) ($value['city'] ?? '')),
+                'countryCode' => strtoupper(trim((string) ($value['countryCode'] ?? ''))),
+                'country' => trim((string) ($value['country'] ?? '')),
+            ];
+        };
+
+        $l = $num($req['dimensions']['l'] ?? null);
+        $w = $num($req['dimensions']['w'] ?? null);
+        $h = $num($req['dimensions']['h'] ?? null);
+
+        $pickupMethod = $method($req['pickupMethod'] ?? 'home');
+        $deliveryMethod = $method($req['deliveryMethod'] ?? 'home');
+
+        return [
+            'regionId' => trim((string) ($req['regionId'] ?? '')),
+            'shipmentType' => ($req['shipmentType'] ?? 'parcel') === 'mail' ? 'mail' : 'parcel',
+            'scope' => in_array($req['scope'] ?? '', ParcelPricing::SCOPES, true) ? $req['scope'] : 'city',
+            'weightKg' => $num($req['weightKg'] ?? null),
+            'dimensions' => ($l && $w && $h) ? ['l' => $l, 'w' => $w, 'h' => $h] : null,
+            'declaredValue' => trim((string) ($req['declaredValue'] ?? '')),
+            'contentDescription' => trim((string) ($req['contentDescription'] ?? '')),
+            'pickupMethod' => $pickupMethod,
+            'deliveryMethod' => $deliveryMethod,
+            'dropoffPointId' => $pickupMethod === 'pickup_point' ? trim((string) ($req['dropoffPointId'] ?? '')) : '',
+            'pickupPointId' => $deliveryMethod === 'pickup_point' ? trim((string) ($req['pickupPointId'] ?? '')) : '',
+            'dropoffPointName' => $pickupMethod === 'pickup_point' ? trim((string) ($req['dropoffPointName'] ?? '')) : '',
+            'pickupPointName' => $deliveryMethod === 'pickup_point' ? trim((string) ($req['pickupPointName'] ?? '')) : '',
+            'origin' => $place($req['origin'] ?? []),
+            'destination' => $place($req['destination'] ?? []),
+        ];
+    }
+
+    /* Every option for this cart, priced from what is live in Firestore. The
+     * region, the carriers and the bands are read here, on the server. */
+    private function parcelQuotes(array $cart, $km): array
+    {
+        $details = $cart['parcelDetails'];
+        $region = $details['regionId'] !== '' ? FirestoreHelper::getDocument('regions/' . $details['regionId']) : null;
+        $carriers = FirestoreHelper::getCollection('delivery_carriers?pageSize=300') ?: [];
+        $bands = FirestoreHelper::getCollection('parcel_weight?pageSize=300') ?: [];
+
+        return ParcelPricing::quotes([
+            'regionId' => $details['regionId'],
+            'scope' => $details['scope'],
+            'km' => (float) $km,
+            'weightKg' => $details['weightKg'],
+            'dimensions' => $details['dimensions'],
+            'selectedBandId' => $cart['senderParcelWeight'] ?? null,
+            'pickupMethod' => $details['pickupMethod'],
+            'deliveryMethod' => $details['deliveryMethod'],
+            'currency' => $cart['currencyData']['code'] ?? '',
+        ], $region, $carriers, $bands);
+    }
+
+    /* Makes one quote the cart's price. subTotal stays the BASE price, as in
+     * the app; the door / pickup-point charges and the fixed charge are kept
+     * apart (parcelExtras) and added to the total in calculateTax(). */
+    private function applyParcelQuote(array $cart, array $quote): array
+    {
+        $details = $cart['parcelDetails'] ?? [];
+
+        $cart['parcelSelectedKey'] = $quote['key'];
+        $cart['parcelDeliveryCharge'] = $quote['priceBreakdown']['carrierPrice'];
+        $cart['parcelExtras'] = $quote['extras'];
+        $cart['priceBreakdown'] = $quote['priceBreakdown'];
+
+        /* The band actually charged - moved up if the parcel was heavier
+         * than the one chosen - is what the order records. */
+        if (!empty($quote['band'])) {
+            $cart['senderParcelWeightName'] = $quote['band']['title'];
+            $cart['deliveryCharge'] = $quote['band']['delivery_charge'];
+        }
+
+        /* Exactly the fields the app writes on parcel_orders. Added to the
+         * order by BOTH write paths - cash/wallet on the checkout page, and
+         * online payments on the success page. */
+        $cart['parcelOrderFields'] = [
+            'shipmentType' => $details['shipmentType'] ?? 'parcel',
+            'scope' => $details['scope'] ?? 'city',
+            'weightKg' => $details['weightKg'] ?? null,
+            'dimensions' => $details['dimensions'] ?? null,
+            'declaredValue' => $details['declaredValue'] ?? '',
+            'contentDescription' => $details['contentDescription'] ?? '',
+            'pickupMethod' => $details['pickupMethod'] ?? 'home',
+            'deliveryMethod' => $details['deliveryMethod'] ?? 'home',
+            'dropoffPointId' => $details['dropoffPointId'] ?? '',
+            'pickupPointId' => $details['pickupPointId'] ?? '',
+            'carrierId' => $quote['carrierId'],
+            'carrierName' => $quote['carrierName'],
+            'regionId' => $details['regionId'] ?? '',
+            'origin' => $details['origin'] ?? null,
+            'destination' => $details['destination'] ?? null,
+        ];
+
+        return $cart;
     }
    
     function distance($lat1, $lon1, $lat2, $lon2)
@@ -277,7 +432,9 @@ class ParcelController extends Controller
         }
 
         $cart['tax_total_amount'] = $totalTax;
-        $cart['total_pay'] = $finalSubtotal + $cart['platformCharge'] + $totalTax;
+        /* Point 41: door / pickup-point and fixed charges are added after tax,
+         * untaxed - the tax stays on subTotal, as in the app and the admin. */
+        $cart['total_pay'] = $finalSubtotal + $cart['platformCharge'] + $totalTax + (float) ($cart['parcelExtras'] ?? 0);
 
         return $cart;
     }

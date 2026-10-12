@@ -157,6 +157,45 @@
      */
     var parcelReceipts = {};
 
+    /* ---- Point 41 ---------------------------------------------------------
+     * The charges an order carries OUTSIDE subTotal: the door / pickup-point
+     * charges (options) and the inter-city / international fixed charge -
+     * written by the app and now by this site in priceBreakdown. Orders from
+     * before either existed have none, so their totals do not change.
+     *
+     * Without this, an inter-city order showed the customer 5,000 less than
+     * they paid, here and on the receipt. */
+    function p41OrderExtras(val) {
+        var b = (val && val.priceBreakdown) || {};
+        var n = function (v) { var x = parseFloat(v); return isNaN(x) ? 0 : x; };
+        var options = n(b.options), fixedTax = n(b.fixedTax), extraKg = n(b.extraKgCharge);
+        return {
+            options: options,
+            fixedTax: fixedTax,
+            extraKgCharge: extraKg,
+            scope: (val && val.scope) || '',
+            total: options + fixedTax + extraKg
+        };
+    }
+
+    function p41FixedLabel(extras) {
+        return (extras.scope === 'intercountry' || extras.scope === 'international')
+            ? "{{ trans('lang.parcel_fixed_intercountry') }}"
+            : "{{ trans('lang.parcel_fixed_intercity') }}";
+    }
+
+    function p41OrderExtrasHtml(extras) {
+        var row = function (label, amount) {
+            return "<div class='payment-total d-flex'><label>" + label + "</label>" +
+                "<span class='price ml-auto'>+" + formatCurrency(amount, currencyData) + "</span></div>";
+        };
+        var html = '';
+        if (extras.options > 0) { html += row("{{ trans('lang.parcel_options_charge') }}", extras.options); }
+        if (extras.fixedTax > 0) { html += row(p41FixedLabel(extras), extras.fixedTax); }
+        if (extras.extraKgCharge > 0) { html += row("{{ trans('lang.parcel_extra_kg_charge') }}", extras.extraKgCharge); }
+        return html;
+    }
+
     function recordParcelReceipt(val, figures) {
         var lines = [];
         var add = function (label, amount) {
@@ -171,6 +210,11 @@
         add("{{ trans('lang.platform_charge') }}", figures.platformFee);
         if (figures.smsCharge) {
             add("{{ trans('lang.receiver_sms_notification') }}", figures.smsCharge);
+        }
+        if (figures.p41) {
+            add("{{ trans('lang.parcel_options_charge') }}", figures.p41.options);
+            add(p41FixedLabel(figures.p41), figures.p41.fixedTax);
+            add("{{ trans('lang.parcel_extra_kg_charge') }}", figures.p41.extraKgCharge);
         }
         add("{{ trans('lang.tax') }}", figures.tax);
 
@@ -352,7 +396,8 @@
                 }
 
                 // Final total
-                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge;
+                let p41x = p41OrderExtras(val);
+                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge + p41x.total;
 
                 /* The figures this card just worked out, kept for the
                  * receipt. Recorded per order because this screen lists
@@ -363,6 +408,7 @@
                     platformFee: platformFee,
                     weightCharge: parcelWeightCharge,
                     smsCharge: smsCharge,
+                    p41: p41x,
                     tax: total_tax_amount,
                     total: order_total
                 });
@@ -395,6 +441,7 @@
                     "</div>";
                 }
                 
+                html += p41OrderExtrasHtml(p41x);
                 html = html + taxHtml;
 
                 html += "<div class='payment-total d-flex'>" +
@@ -572,7 +619,8 @@
                 }
 
                 // Final total
-                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge;
+                let p41x = p41OrderExtras(val);
+                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge + p41x.total;
 
                 /* The figures this card just worked out, kept for the
                  * receipt. Recorded per order because this screen lists
@@ -583,6 +631,7 @@
                     platformFee: platformFee,
                     weightCharge: parcelWeightCharge,
                     smsCharge: smsCharge,
+                    p41: p41x,
                     tax: total_tax_amount,
                     total: order_total
                 });
@@ -615,6 +664,7 @@
                     "</div>";
                 }
                 
+                html += p41OrderExtrasHtml(p41x);
                 html = html + taxHtml;
 
                 html += "<div class='payment-total d-flex'>" +
@@ -748,7 +798,8 @@
                 }
 
                 // Final total
-                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge;
+                let p41x = p41OrderExtras(val);
+                let order_total = (order_subtotal - total_discount) + platformFee + total_tax_amount + smsCharge + p41x.total;
 
                 /* The figures this card just worked out, kept for the
                  * receipt. Recorded per order because this screen lists
@@ -759,6 +810,7 @@
                     platformFee: platformFee,
                     weightCharge: parcelWeightCharge,
                     smsCharge: smsCharge,
+                    p41: p41x,
                     tax: total_tax_amount,
                     total: order_total
                 });
@@ -791,6 +843,7 @@
                     "</div>";
                 }
                 
+                html += p41OrderExtrasHtml(p41x);
                 html = html + taxHtml;
 
                 html += "<div class='payment-total d-flex'>" +

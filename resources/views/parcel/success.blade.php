@@ -43,6 +43,7 @@
 @if($message = Session::get('success'))
 
     <script src="{{ asset('js/geofirestore.js') }}"></script>
+    @include('parcel.partials.order_fields_js')
 
     <script type="text/javascript">
         var fcmToken = '';
@@ -183,6 +184,11 @@
                         'platformTax': platformTax,
                         'sendReceiverSms': order_json.sendReceiverSms ? true : false,
                         'smsCharge': order_json.smsCharge ? parseFloat(order_json.smsCharge) : 0,
+                        /* Point 41: the app's fields. The server total excludes
+                           the SMS fee, which the checkout adds on top. */
+                        ...p41OrderFields(cart,
+                            (parseFloat(cart.total_pay) || 0) + (order_json.sendReceiverSms ? (parseFloat(order_json.smsCharge) || 0) : 0),
+                            order_json.sendReceiverSms ? order_json.smsCharge : 0),
                     }).then(function (result) {
                         $.ajax({
                             type: 'POST',

@@ -1,5 +1,6 @@
 @include('layouts.app')
 @include('layouts.header')
+@include('parcel.partials.styles')
 <?php
 session_start();
 ?>
@@ -99,6 +100,7 @@ session_start();
                             </div>
                         </div>
                     </div>
+                    @include('parcel.partials.carrier_choice')
                     <div class="card">
                         <div class="coupon_detail">
                         </div>
@@ -319,6 +321,23 @@ session_start();
                                 </span>
                             </div>
 
+                            {{-- Point 41: the door / pickup-point charges and the
+                                 inter-city / international fixed charge. Already in
+                                 total_pay on the server; listed so the total adds up. --}}
+                            @php $p41Totals = $parcel_cart['priceBreakdown'] ?? null; @endphp
+                            @if($p41Totals && ($p41Totals['options'] ?? 0) > 0)
+                                <div class="payment-total d-flex">
+                                    <label>{{ trans('lang.parcel_options_charge') }}</label>
+                                    <span class="price ml-auto">+{{ formatCurrency($p41Totals['options'], $parcel_cart['currencyData']) }}</span>
+                                </div>
+                            @endif
+                            @if($p41Totals && ($p41Totals['fixedTax'] ?? 0) > 0)
+                                <div class="payment-total d-flex">
+                                    <label>{{ (($parcel_cart['parcelDetails']['scope'] ?? '') === 'intercountry') ? trans('lang.parcel_fixed_intercountry') : trans('lang.parcel_fixed_intercity') }}</label>
+                                    <span class="price ml-auto">+{{ formatCurrency($p41Totals['fixedTax'], $parcel_cart['currencyData']) }}</span>
+                                </div>
+                            @endif
+
                             <div class="payment-total d-flex" id="sms_charge_row" style="display: none !important;">
                                 <label>{{ trans('lang.receiver_sms_notification') }}</label>
                                 <span class="price ml-auto" id="sms_charge_val" style="color: green;">
@@ -391,6 +410,7 @@ session_start();
 
 <script src="https://cdn.firebase.com/libs/geofire/5.0.1/geofire.min.js"></script>
 <script type="text/javascript" src="{{asset('vendor/slick/slick.min.js')}}"></script>
+@include('parcel.partials.order_fields_js')
 
 <script type="text/javascript">
 
@@ -418,6 +438,28 @@ session_start();
     var distanceSetting = database.collection('settings').doc('DriverNearBy');
 
     var cart = @json($parcel_cart);
+
+    /* Point 41: switching carrier. Only the option's key is sent - the server
+     * re-applies the price it worked out itself - then the page reloads so
+     * every total on it comes from the server again. */
+    $(document).on('change', 'input[name="p41_carrier"]', function () {
+        var key = $(this).val();
+        $('.p41-carrier').removeClass('is-selected');
+        $(this).closest('.p41-carrier').addClass('is-selected');
+        $("#overlay").show();
+        $.ajax({
+            type: 'POST',
+            url: "{{ route('parcel_select_carrier') }}",
+            data: {_token: '{{ csrf_token() }}', key: key},
+            success: function () {
+                window.location.reload();
+            },
+            error: function () {
+                $("#overlay").hide();
+                Swal.fire({text: "{{ trans('lang.parcel_select_carrier_error') }}", icon: "error"});
+            }
+        });
+    });
     var taxSetting = cart?.taxSetting ?? [];
     var taxScope = cart?.taxScope ?? 'order';
     var platformTax        = cart?.taxesByScope?.platform ?? [];
@@ -1761,6 +1803,8 @@ session_start();
                     'platformTax': platformTax,
                     'sendReceiverSms': sendReceiverSms ? true : false,
                     'smsCharge': sendReceiverSms ? (parseFloat(smsCharge) || 0) : 0,
+                    /* Point 41: the app's fields - see parcel/partials/order_fields_js */
+                    ...p41OrderFields(cart, total_pay, sendReceiverSms ? smsCharge : 0),
                 }).then(function (result) {
 
                     $.ajax({

@@ -1,5 +1,6 @@
 @include('layouts.app')
 @include('layouts.header')
+@include('parcel.partials.styles')
 @php
     $countries = file_get_contents(public_path('countriesdata.json'));
     $countries = json_decode($countries);
@@ -50,9 +51,10 @@
                     <div class="tab-content" id="nav-tabContent">
                         <div class="tab-pane fade show active" id="as-soon-as-possible" role="tabpanel"
                              aria-labelledby="nav-home-tab">
+                            @include('parcel.partials.shipment', ['tab' => 'asap'])
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
-                                    <h3><span>1</span>{{trans('lang.sender_info')}}</h3>
+                                    <h3><span>2</span>{{trans('lang.sender_info')}}</h3>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -96,7 +98,7 @@
                             </div>
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
-                                    <h3><span>2</span> {{trans('lang.receiver_info')}}</h3>
+                                    <h3><span>3</span> {{trans('lang.receiver_info')}}</h3>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -127,9 +129,10 @@
                                     </div>
                                 </div>
                             </div>
+                            @include('parcel.partials.parcel_details', ['tab' => 'asap', 'number' => 4])
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
-                                    <h3><span>3</span> {{trans('lang.upload_parcel_image')}}</h3>
+                                    <h3><span>6</span> {{trans('lang.upload_parcel_image')}}</h3>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -150,9 +153,10 @@
                             </div>
                         </div>
                         <div class="tab-pane fade" id="schedule" role="tabpanel" aria-labelledby="nav-profile-tab">
+                            @include('parcel.partials.shipment', ['tab' => 'schedule'])
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
-                                    <h3><span>1</span>{{trans('lang.sender_info')}}</h3>
+                                    <h3><span>2</span>{{trans('lang.sender_info')}}</h3>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -201,7 +205,7 @@
                             </div>
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
-                                    <h3><span>2</span> {{trans('lang.receiver_info')}} </h3>
+                                    <h3><span>3</span> {{trans('lang.receiver_info')}} </h3>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -233,9 +237,10 @@
                                     </div>
                                 </div>
                             </div>
+                            @include('parcel.partials.parcel_details', ['tab' => 'schedule', 'number' => 4])
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
-                                    <h3><span>3</span> {{trans('lang.upload_parcel_image')}}</h3>
+                                    <h3><span>6</span> {{trans('lang.upload_parcel_image')}}</h3>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -281,6 +286,139 @@
     var parcelWeightRef = database.collection('parcel_weight');
     var parcelImages = [];
     var parcelImagesCount = 0;
+
+    /* ---- Point 41 ---------------------------------------------------------
+     * The app's parcel fields, on the website. Prices are NOT worked out here:
+     * the server prices every option from what is live in Firestore (see
+     * App\Services\ParcelPricing) once Continue is pressed. This page only
+     * collects what the customer says about the parcel. */
+    var senderPlace = {city: '', countryCode: '', country: ''};
+    var receiverPlace = {city: '', countryCode: '', country: ''};
+    var parcelPickupPoints = [];
+
+    /* City and country from a geocoding result, saved on the order as
+     * origin / destination exactly as the app does. Every part may be
+     * missing - Google tags parts with several types, so membership is
+     * tested, never types[0]. */
+    function p41PlaceFromGoogle(result) {
+        var place = {city: '', countryCode: '', country: ''};
+        var components = (result && result.address_components) || [];
+        var cityTypes = ['locality', 'postal_town', 'administrative_area_level_2', 'administrative_area_level_1'];
+        for (var t = 0; t < cityTypes.length && place.city === ''; t++) {
+            for (var i = 0; i < components.length; i++) {
+                if ((components[i].types || []).indexOf(cityTypes[t]) !== -1) {
+                    place.city = components[i].long_name || '';
+                    break;
+                }
+            }
+        }
+        for (var j = 0; j < components.length; j++) {
+            if ((components[j].types || []).indexOf('country') !== -1) {
+                place.country = components[j].long_name || '';
+                place.countryCode = (components[j].short_name || '').toUpperCase();
+            }
+        }
+        return place;
+    }
+
+    function p41PlaceFromNominatim(item) {
+        var address = (item && item.address) || {};
+        return {
+            city: address.city || address.town || address.village || address.county || address.state || '',
+            countryCode: (address.country_code || '').toUpperCase(),
+            country: address.country || ''
+        };
+    }
+
+    function p41Plain(text) {
+        return String(text || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    /* Agreed 12 Oct, decision 1: Where to? is the customer's choice, as in the
+     * app - but a choice that plainly contradicts the two addresses earns a
+     * question before the price is worked out on it. Returns the question,
+     * or '' when nothing looks wrong or the addresses cannot be read. */
+    function p41ScopeWarning(scope, from, to) {
+        if (!from.countryCode || !to.countryCode) {
+            return '';
+        }
+        if (from.countryCode !== to.countryCode) {
+            return scope === 'intercountry' ? '' : "{{ trans('lang.parcel_scope_warning_country') }}";
+        }
+        if (scope === 'intercountry') {
+            return "{{ trans('lang.parcel_scope_warning_same_country') }}";
+        }
+        if (!from.city || !to.city) {
+            return '';
+        }
+        var sameCity = p41Plain(from.city) === p41Plain(to.city);
+        if (scope === 'city' && !sameCity) {
+            return "{{ trans('lang.parcel_scope_warning_other_city') }}";
+        }
+        if (scope === 'intercity' && sameCity) {
+            return "{{ trans('lang.parcel_scope_warning_same_city') }}";
+        }
+        return '';
+    }
+
+    function p41PointLabel(point) {
+        return [point.name, point.quarter, point.town].filter(Boolean).join(', ');
+    }
+
+    /* The pickup points of the customer's region only. */
+    (async function loadParcelPickupPoints() {
+        try {
+            var regionId = await getActiveRegionId();
+            if (!regionId) {
+                return;
+            }
+            var snapshot = await database.collection('pickup_points').where('regionId', '==', regionId).get();
+            parcelPickupPoints = snapshot.docs.map(function (doc) {
+                return Object.assign({id: doc.id}, doc.data());
+            }).filter(function (point) {
+                return point.publish === true || point.publish === 1 || point.publish === '1';
+            }).sort(function (a, b) {
+                return p41PointLabel(a).localeCompare(p41PointLabel(b));
+            });
+
+            $('.p41-point-select').each(function () {
+                var $select = $(this);
+                parcelPickupPoints.forEach(function (point) {
+                    $select.append($('<option></option>').val(point.id).text(p41PointLabel(point)));
+                });
+            });
+        } catch (err) {
+            console.error('pickup points could not be loaded', err);
+        }
+    })();
+
+    function p41ToggleNoPoints($tab) {
+        var wantsPoint = $tab.find('.p41-pickup-method:checked').val() === 'pickup_point'
+            || $tab.find('.p41-delivery-method:checked').val() === 'pickup_point';
+        $tab.find('.p41-no-points').toggle(wantsPoint && parcelPickupPoints.length === 0);
+    }
+
+    $(document).on('change', '.p41-pickup-method', function () {
+        var $tab = $(this).closest('.tab-pane');
+        $tab.find('.p41-dropoff-point').toggle($(this).val() === 'pickup_point');
+        p41ToggleNoPoints($tab);
+    });
+
+    $(document).on('change', '.p41-delivery-method', function () {
+        var $tab = $(this).closest('.tab-pane');
+        $tab.find('.p41-pickup-point').toggle($(this).val() === 'pickup_point');
+        p41ToggleNoPoints($tab);
+    });
+
+    /* A number of 0 or more, '' when left empty, NaN when it is nonsense. */
+    function p41Number(value) {
+        var raw = String(value === null || value === undefined ? '' : value).trim().replace(',', '.');
+        if (raw === '') {
+            return '';
+        }
+        var number = Number(raw);
+        return (isFinite(number) && number >= 0) ? number : NaN;
+    }
     
     var currencyData = '';
     var currentCurrency = '';
@@ -352,74 +490,202 @@
         $(activeTabId).find('.senderAddress').val(address_name);
     });
 
-    async function getSenderAddress(callback) {
+    /* ---- Both addresses come from Google (12 Oct) ---------------------------
+     *
+     * Reported: the receiver's address "is not working"; both addresses should
+     * come from Google Maps. Four faults were behind it:
+     *
+     *  1. The suggestions were attached only when the service_type cookie read
+     *     exactly "Parcel Delivery Service" - reach this page any other way and
+     *     both boxes were plain text.
+     *  2. Choosing a suggestion put only the place's SHORT NAME in the box
+     *     ("Ganga Nagar Rd"), and Continue then looked that text up AGAIN - a
+     *     bare name often resolves badly or not at all.
+     *  3. When that lookup failed, nothing happened. And an EMPTY address was
+     *     looked up before it was checked, failed, and also did nothing - so
+     *     "please enter the receiver's address" was never shown.
+     *  4. Choosing the receiver overwrote the customer's own location
+     *     (address_name / address_lat) - and a tab switch then copied the
+     *     RECEIVER's name into the SENDER box.
+     *
+     * Now this page owns its four address boxes: Google suggestions on each,
+     * waiting for Maps to finish loading; the FULL address goes in the box;
+     * the chosen place's own coordinates and city / country are kept on the
+     * box and used as they are. Only an address typed without choosing a
+     * suggestion is looked up, and a failed lookup says so.
+     * ---------------------------------------------------------------------- */
 
-        var senderAddress = $(activeTabId).find('.senderAddress').val();
-        if(mapType == 'google'){
-            
-            var geocoder = new google.maps.Geocoder();
-            geocoder.geocode({'address': senderAddress}, function (results, status) {
-                if (status == google.maps.GeocoderStatus.OK) {
-                    sender_address_lat = results[0].geometry.location.lat();
-                    sender_address_lng = results[0].geometry.location.lng();
-                    callback(true);
-                }
-            });
-        }else{       
-        
-            var nominatimUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(senderAddress);
+    /* Read by layouts/footer's setParcelLocations(), which stands down. */
+    window.p41ParcelOwnsAddresses = true;
 
-           fetch(nominatimUrl)
-            .then(response => response.json())
-            .then(data => {
-                if (data && data.length > 0) {
-                // pick best match with address type
-                let best = data.find(item => 
-                    item.type === 'house' || item.type === 'road' || item.type === 'neighbourhood'
-                ) || data[0];
-                
-                sender_address_lat = parseFloat(best.lat);
-                sender_address_lng = parseFloat(best.lon);
-                callback(true);
-                }
-            })
-            .catch(error => {
-                console.error("Geocoding failed:", error);
-            });
+    function p41StoreChosen(input, text, lat, lng, place) {
+        $(input).data('p41Chosen', {
+            text: String(text || '').trim(),
+            lat: parseFloat(lat),
+            lng: parseFloat(lng),
+            place: place || {city: '', countryCode: '', country: ''}
+        });
+    }
+
+    /* The place chosen for this box - but only while the box still says what
+     * was chosen. Editing the text afterwards means a new address. */
+    function p41Chosen(input) {
+        var chosen = input ? $(input).data('p41Chosen') : null;
+        if (!chosen) {
+            return null;
         }
+        var current = String($(input).val() || '').trim();
+        return (chosen.text === current && isFinite(chosen.lat) && isFinite(chosen.lng)) ? chosen : null;
+    }
+
+    $(document).on('input', '.senderAddress, .receiverAddress', function () {
+        $(this).removeData('p41Chosen');
+    });
+
+    function p41BindAddress(input) {
+        if (!input || $(input).data('p41Bound')) {
+            return;
+        }
+        $(input).data('p41Bound', true);
+
+        var autocomplete = new google.maps.places.Autocomplete(input, {
+            fields: ['formatted_address', 'name', 'geometry', 'address_components']
+        });
+        autocomplete.addListener('place_changed', function () {
+            var place = autocomplete.getPlace();
+            var location = place && place.geometry && place.geometry.location;
+
+            /* Enter pressed on typed text: Google returns a place with no
+             * geometry. Leave the text; Continue will look it up. */
+            if (!location || typeof location.lat !== 'function') {
+                $(input).removeData('p41Chosen');
+                return;
+            }
+
+            var text = place.formatted_address || place.name || '';
+            $(input).val(text);
+            p41StoreChosen(input, text, location.lat(), location.lng(), p41PlaceFromGoogle(place));
+        });
+    }
+
+    /* True once done (or when the map is not Google - the footer's own
+     * OpenStreetMap suggestions then apply). */
+    function p41AttachAddressAutocomplete() {
+        /* mapType is read from Firestore AFTER this page starts, so for the
+         * first moments it is ''. That means "not known yet" - NOT "not
+         * Google". Giving up on '' is exactly why the suggestions never
+         * appeared (12 Oct). Only a map type that is SET and is not Google
+         * stops this: the footer's OpenStreetMap suggestions then apply. */
+        if (typeof mapType !== 'undefined' && mapType && mapType !== 'google') {
+            return true;
+        }
+        if (!(window.google && google.maps && google.maps.places && google.maps.places.Autocomplete)) {
+            return false;
+        }
+        $('.senderAddress, .receiverAddress').each(function () {
+            p41BindAddress(this);
+        });
+        return true;
+    }
+
+    /* Maps is loaded only after the map type and its key are read from
+     * Firestore, so it is not ready yet. Checked every quarter second for 30
+     * seconds - a slow connection can take a while - then left. */
+    (function () {
+        var tries = 0;
+        var timer = setInterval(function () {
+            if (p41AttachAddressAutocomplete() || ++tries > 120) {
+                clearInterval(timer);
+            }
+        }, 250);
+    })();
+
+    /* One routine for both ends. Calls back only with a usable address. */
+    function p41ResolveAddress(role, callback) {
+        var isSender = role === 'sender';
+        var $input = $(activeTabId).find(isSender ? '.senderAddress' : '.receiverAddress');
+        var text = String($input.val() || '').trim();
+
+        var say = function (message) {
+            $(".error_top").show().html($('<p></p>').text(message));
+            window.scrollTo(0, 0);
+        };
+        var done = function (lat, lng, place) {
+            if (isSender) {
+                sender_address_lat = lat;
+                sender_address_lng = lng;
+                senderPlace = place;
+            } else {
+                receiver_address_lat = lat;
+                receiver_address_lng = lng;
+                receiverPlace = place;
+            }
+            callback(true);
+        };
+        var notFound = function () {
+            say(isSender
+                ? "{{ trans('lang.parcel_sender_address_not_found') }}"
+                : "{{ trans('lang.parcel_receiver_address_not_found') }}");
+        };
+
+        /* Checked FIRST - an empty box used to be looked up, fail, and leave
+         * the customer with a button that did nothing. */
+        if (text === '') {
+            say(isSender ? "{{ trans('lang.sender_address_error') }}" : "{{ trans('lang.receiver_address_error') }}");
+            return;
+        }
+
+        var chosen = p41Chosen($input[0]);
+        if (chosen) {
+            done(chosen.lat, chosen.lng, chosen.place);
+            return;
+        }
+
+        if (mapType == 'google') {
+            if (!(window.google && google.maps && google.maps.Geocoder)) {
+                notFound();
+                return;
+            }
+            new google.maps.Geocoder().geocode({'address': text}, function (results, status) {
+                var first = results && results[0];
+                var location = first && first.geometry && first.geometry.location;
+                if (status == google.maps.GeocoderStatus.OK && location) {
+                    var place = p41PlaceFromGoogle(first);
+                    p41StoreChosen($input[0], text, location.lat(), location.lng(), place);
+                    done(location.lat(), location.lng(), place);
+                } else {
+                    notFound();
+                }
+            });
+            return;
+        }
+
+        var nominatimUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(text);
+        fetch(nominatimUrl)
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (!data || !data.length) {
+                    notFound();
+                    return;
+                }
+                /* pick best match with address type */
+                var best = data.find(function (item) {
+                    return item.type === 'house' || item.type === 'road' || item.type === 'neighbourhood';
+                }) || data[0];
+                done(parseFloat(best.lat), parseFloat(best.lon), p41PlaceFromNominatim(best));
+            })
+            .catch(function (error) {
+                console.error("Geocoding failed:", error);
+                notFound();
+            });
+    }
+
+    async function getSenderAddress(callback) {
+        p41ResolveAddress('sender', callback);
     }
 
     async function getReceiverAddress(callback) {
-        var receiverAddress = $(activeTabId).find('.receiverAddress').val();
-        if(mapType == 'google'){
-            var geocoder = new google.maps.Geocoder();
-            geocoder.geocode({'address': receiverAddress}, function (results, status) {
-                if (status == google.maps.GeocoderStatus.OK) {
-                    receiver_address_lat = results[0].geometry.location.lat();
-                    receiver_address_lng = results[0].geometry.location.lng();
-                    callback(true);
-                }
-            });
-        }else{
-        var nominatimUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' + encodeURIComponent(receiverAddress);
-           fetch(nominatimUrl)
-            .then(response => response.json())
-            .then(data => {
-                if (data && data.length > 0) {
-                // pick best match with address type
-                let best = data.find(item => 
-                    item.type === 'house' || item.type === 'road' || item.type === 'neighbourhood'
-                ) || data[0];
-                
-                receiver_address_lat = parseFloat(best.lat);
-                receiver_address_lng = parseFloat(best.lon);
-                callback(true);
-                }
-            })
-            .catch(error => {
-                console.error("Geocoding failed:", error);
-            });
-        }
+        p41ResolveAddress('receiver', callback);
     }
 
     $(document).on('click', '.parcel_btn', async function () {
@@ -442,6 +708,25 @@
         var parcelType = $("#parcelType").val();
         var parcelCategoryId = '<?php echo $id; ?>';
         var isSchedule = false;
+
+        /* Point 41 - read from the active tab, like every field above. */
+        var $p41Tab = $(activeTabId);
+        var shipmentType = $p41Tab.find('.p41-shipment-type:checked').val() || 'parcel';
+        var parcelScope = $p41Tab.find('.p41-scope:checked').val() || 'city';
+        var weightKg = p41Number($p41Tab.find('.p41-weight-kg').val());
+        var dimensions = {};
+        $p41Tab.find('.p41-dim').each(function () {
+            dimensions[$(this).attr('data-dim')] = p41Number($(this).val());
+        });
+        var dimensionsGiven = ['l', 'w', 'h'].filter(function (k) { return dimensions[k] !== ''; }).length;
+        var declaredValue = p41Number($p41Tab.find('.p41-declared-value').val());
+        var contentDescription = String($p41Tab.find('.p41-content-description').val() || '').trim();
+        var pickupMethod = $p41Tab.find('.p41-pickup-method:checked').val() || 'home';
+        var deliveryMethod = $p41Tab.find('.p41-delivery-method:checked').val() || 'home';
+        var dropoffPointId = pickupMethod === 'pickup_point' ? ($p41Tab.find('.p41-dropoff-point').val() || '') : '';
+        var pickupPointId = deliveryMethod === 'pickup_point' ? ($p41Tab.find('.p41-pickup-point').val() || '') : '';
+        var dropoffPointName = dropoffPointId ? $p41Tab.find('.p41-dropoff-point option:selected').text() : '';
+        var pickupPointName = pickupPointId ? $p41Tab.find('.p41-pickup-point option:selected').text() : '';
       
         getSenderAddress(async function (response) {
             getReceiverAddress(async function (response) {
@@ -511,7 +796,36 @@
                 }else if (!/^\d+$/.test(receiverPhone)) {
                     $(".error_top").show().html("<p>{{trans('lang.phone_contains_numbers_only')}}</p>");
                     window.scrollTo(0, 0);
+                } else if (Number.isNaN(weightKg) || Number.isNaN(declaredValue)
+                    || ['l', 'w', 'h'].some(function (k) { return Number.isNaN(dimensions[k]); })) {
+                    $(".error_top").show().html("<p>{{ trans('lang.parcel_number_error') }}</p>");
+                    window.scrollTo(0, 0);
+                } else if (dimensionsGiven > 0 && dimensionsGiven < 3) {
+                    /* Size counts only with all three - say so, rather than
+                       silently ignoring two of them. */
+                    $(".error_top").show().html("<p>{{ trans('lang.parcel_dimensions_all_three') }}</p>");
+                    window.scrollTo(0, 0);
+                } else if (pickupMethod === 'pickup_point' && !dropoffPointId) {
+                    $(".error_top").show().html("<p>{{ trans('lang.parcel_choose_dropoff_point') }}</p>");
+                    window.scrollTo(0, 0);
+                } else if (deliveryMethod === 'pickup_point' && !pickupPointId) {
+                    $(".error_top").show().html("<p>{{ trans('lang.parcel_choose_collection_point') }}</p>");
+                    window.scrollTo(0, 0);
                 } else {
+
+                    var scopeQuestion = p41ScopeWarning(parcelScope, senderPlace, receiverPlace);
+                    if (scopeQuestion !== '' && !window.confirm(scopeQuestion)) {
+                        return false;
+                    }
+
+                    /* The customer's region decides which carriers are offered
+                       and the currency of every price (decision 3). */
+                    var parcelRegionId = '';
+                    try {
+                        parcelRegionId = await getActiveRegionId() || '';
+                    } catch (err) {
+                        console.error('active region could not be read', err);
+                    }
 
                     const payload = {
                             _token: '<?php echo csrf_token(); ?>',
@@ -546,6 +860,22 @@
                             taxesByScope,
                             platformCharge,
                             currencyData,
+                            /* Point 41 */
+                            regionId: parcelRegionId,
+                            shipmentType: shipmentType,
+                            scope: parcelScope,
+                            weightKg: weightKg === '' ? null : weightKg,
+                            dimensions: dimensionsGiven === 3 ? dimensions : null,
+                            declaredValue: declaredValue === '' ? '' : String(declaredValue),
+                            contentDescription: contentDescription,
+                            pickupMethod: pickupMethod,
+                            deliveryMethod: deliveryMethod,
+                            dropoffPointId: dropoffPointId,
+                            pickupPointId: pickupPointId,
+                            dropoffPointName: dropoffPointName,
+                            pickupPointName: pickupPointName,
+                            origin: senderPlace,
+                            destination: receiverPlace,
                     };
 
                     $.ajax({
@@ -555,6 +885,13 @@
                         dataType: 'json',
                         data: JSON.stringify(payload),
                         success: function (data) {
+                            /* Point 41: e.g. "Other country" in a region where
+                               no carrier delivers abroad. */
+                            if (data && data.status === false) {
+                                $(".error_top").show().html($('<p></p>').text(data.message || ''));
+                                window.scrollTo(0, 0);
+                                return;
+                            }
                             var url = "{{ route('parcel_checkout')}}";
                             window.location.href = url;
                         }

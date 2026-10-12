@@ -173,7 +173,11 @@
     var mapType = '';
     var type = '';
     var mapTypeDoc = database.collection('settings').doc('DriverNearBy');
-    mapTypeDoc.get().then(async function(snapshots) {
+    /* Kept as a promise so loadGoogleMapsScript() can WAIT for it. The two
+       Firestore reads used to race: when the map key arrived first, mapType
+       was still '' and OpenStreetMap was loaded in place of Google - on any
+       page, at random. */
+    var mapTypeReady = mapTypeDoc.get().then(async function(snapshots) {
         var mapTypeData = snapshots.data();
 
         /* No settings document leaves mapType as '', which every reader below
@@ -401,6 +405,13 @@
     }
 
     async function loadGoogleMapsScript() {
+        /* The map type decides which library loads below - wait for it. A
+           failed read leaves mapType '' and the map still loads, as before. */
+        try {
+            await mapTypeReady;
+        } catch (err) {
+            console.error('map type could not be read', err);
+        }
         await database.collection('settings').doc("googleMapKey").get().then(function(googleMapKeySnapshotsHeader) {
             var placeholderImageHeaderData = googleMapKeySnapshotsHeader.data();
 
@@ -599,6 +610,13 @@
     }
 
     function setParcelLocations() {
+        /* The parcel page attaches its own suggestions to its address boxes
+           (parcel/parcel.blade.php). Attaching these as well would give each
+           box two dropdowns - and these write the chosen place into the
+           customer's OWN location (address_name / address_lat). */
+        if (window.p41ParcelOwnsAddresses) {
+            return;
+        }
         var input = document.getElementById('senderAddress');
         if (input) {
             var autocomplete = new google.maps.places.Autocomplete(input);
