@@ -1122,4 +1122,7 @@ return [
     'parcel_tracking_number' => 'Tracking number',
     'parcel_tracking_history' => 'History',
     'parcel_history_driver_assigned' => 'Driver assigned',
+    'order_history_status' => 'Status',
+    'order_history_status_all' => 'All statuses',
+    'order_history_print_status' => 'Status',
 ];

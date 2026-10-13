@@ -41,6 +41,16 @@
                             <input type="date" id="order_period_to" class="form-control w-auto mr-2 mb-0">
                             <button type="button" id="order_period_apply" class="btn btn-primary btn-sm">{{ trans('lang.order_history_period_apply') }}</button>
                         </div>
+                        {{-- Point 72: export one status, or all four. The
+                             values are the tab panes' ids. --}}
+                        <label class="mb-0 mr-2 ml-2 font-weight-bold" for="order_status_filter">{{ trans('lang.order_history_status') }}</label>
+                        <select id="order_status_filter" class="form-control w-auto mr-2 mb-0">
+                            <option value="">{{ trans('lang.order_history_status_all') }}</option>
+                            <option value="completed">{{ trans('lang.completed') }}</option>
+                            <option value="progress">{{ trans('lang.on_progress') }}</option>
+                            <option value="canceled">{{ trans('lang.canceled') }}</option>
+                            <option value="rejected">{{ trans('lang.rejected') }}</option>
+                        </select>
                         <span id="order_period_summary" class="text-muted small ml-auto"></span>
                         {{-- 02#54: printing lives in this bar on purpose. The
                              bar is shown only to a customer whose plan carries
@@ -82,6 +92,7 @@
                 <h4 class="mb-1">{{ trans('lang.order_history_print_title') }}</h4>
                 <p class="mb-0 small"><strong>{{ trans('lang.order_history_print_customer') }}:</strong> <span id="print_customer"></span></p>
                 <p class="mb-0 small"><strong>{{ trans('lang.order_history_print_period') }}:</strong> <span id="print_period"></span></p>
+                <p class="mb-0 small"><strong>{{ trans('lang.order_history_print_status') }}:</strong> <span id="print_status"></span></p>
                 <p class="mb-3 small"><strong>{{ trans('lang.order_history_print_generated') }}:</strong> <span id="print_generated"></span></p>
             </div>
 
@@ -144,6 +155,9 @@
            with .fade/.active; print needs all four. */
         .tab-content > .tab-pane { display: block !important; opacity: 1 !important; }
         .tab-pane.fade { opacity: 1 !important; }
+
+        /* Point 72: one status chosen - only its section prints. */
+        .print-one-status .tab-content > .tab-pane:not(.print-chosen) { display: none !important; }
 
         /* Cards are for a screen: drop the lift and keep the rules, which
            are what makes a long list readable on paper. */
@@ -521,12 +535,35 @@
         return name;
     }
 
+    /* Point 72: which section(s) a print covers. '' = all four. */
+    var ORDER_STATUS_LISTS = {
+        completed: '#completed_orders', progress: '#pending_orders',
+        canceled: '#canceled_orders', rejected: '#rejected_orders'
+    };
+
+    function orderHistoryChosenStatus() {
+        var value = $('#order_status_filter').val() || '';
+        return ORDER_STATUS_LISTS[value] ? value : '';
+    }
+
     function orderHistoryPrintedOrderCount() {
         /* What is actually on the page, after the period filter and the free
-         * allowance - not what came back from Firestore. */
-        return $('#completed_orders, #pending_orders, #canceled_orders, #rejected_orders')
-            .children().length;
+         * allowance - not what came back from Firestore. With one status
+         * chosen, only that section counts: it is the only one printed. */
+        var chosen = orderHistoryChosenStatus();
+        var lists = chosen ? ORDER_STATUS_LISTS[chosen]
+            : '#completed_orders, #pending_orders, #canceled_orders, #rejected_orders';
+        return $(lists).children().length;
     }
+
+    /* Choosing a status also opens its tab, so the screen shows what will
+     * print. "All statuses" leaves the open tab as it is. */
+    $(document).on('change', '#order_status_filter', function () {
+        var chosen = orderHistoryChosenStatus();
+        if (chosen) {
+            $('#' + chosen + '-tab').tab('show');
+        }
+    });
 
     $(document).on('click', '#order_history_print', function () {
         var name = orderHistoryPrintName();
@@ -537,6 +574,16 @@
 
         var now = new Date();
         $('#print_generated').text(now.toDateString() + ' ' + now.toLocaleTimeString());
+
+        var chosen = orderHistoryChosenStatus();
+        $('#print_status').text(chosen
+            ? $('#order_status_filter option:selected').text()
+            : "{{ trans('lang.order_history_status_all') }}");
+        $('body').toggleClass('print-one-status', chosen !== '');
+        $('.tab-content > .tab-pane').removeClass('print-chosen');
+        if (chosen) {
+            $('#' + chosen).addClass('print-chosen');
+        }
 
         /* An empty period must print as a sheet that SAYS it is empty. A
          * blank page reads as a failed print, and the customer tries again. */

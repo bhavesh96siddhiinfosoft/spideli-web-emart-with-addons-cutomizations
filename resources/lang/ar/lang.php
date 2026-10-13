@@ -937,4 +937,7 @@ return [
     'parcel_tracking_number' => 'رقم التتبع',
     'parcel_tracking_history' => 'السجل',
     'parcel_history_driver_assigned' => 'تم تعيين السائق',
+    'order_history_status' => 'الحالة',
+    'order_history_status_all' => 'كل الحالات',
+    'order_history_print_status' => 'الحالة',
 ];
