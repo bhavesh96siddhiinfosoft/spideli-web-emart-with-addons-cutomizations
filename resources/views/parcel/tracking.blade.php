@@ -29,113 +29,7 @@
     <link href="{{ asset('vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/font-awesome.min.css') }}" rel="stylesheet">
 
-    <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: #f2f6f9;
-            padding-bottom: 40px;
-        }
-
-        .track-bar {
-            background: #1c1c1c;
-            color: #fff;
-            padding: 18px 0;
-        }
-
-        .track-card {
-            background: #fff;
-            border-radius: 14px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, .06);
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-
-        /* The progress line sits behind the markers and is clipped by the
-           first and last of them, so it never pokes out at either end. */
-        .track-steps {
-            display: flex;
-            position: relative;
-            margin-top: 22px;
-        }
-
-        .track-steps:before {
-            content: '';
-            position: absolute;
-            top: 13px;
-            left: 8%;
-            right: 8%;
-            height: 3px;
-            background: #e4e9ee;
-        }
-
-        .track-progress {
-            position: absolute;
-            top: 13px;
-            left: 8%;
-            height: 3px;
-            background: #9bcf1f;
-            transition: width .4s ease;
-        }
-
-        .track-step {
-            flex: 1;
-            text-align: center;
-            position: relative;
-            z-index: 1;
-        }
-
-        .track-dot {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: #e4e9ee;
-            color: #fff;
-            margin: 0 auto 8px;
-            line-height: 28px;
-            font-size: 13px;
-        }
-
-        .track-step.done .track-dot {
-            background: #9bcf1f;
-        }
-
-        .track-step-label {
-            font-size: 11px;
-            line-height: 1.3;
-            color: #7b8794;
-        }
-
-        .track-step.done .track-step-label {
-            color: #1c1c1c;
-            font-weight: 500;
-        }
-
-        .track-status-pill {
-            display: inline-block;
-            background: #eaf5d3;
-            color: #4d7c0f;
-            border-radius: 20px;
-            padding: 6px 16px;
-            font-weight: 600;
-        }
-
-        .track-status-pill.stopped {
-            background: #fde8e8;
-            color: #b42318;
-        }
-
-        .track-label {
-            font-size: 11px;
-            letter-spacing: .04em;
-            text-transform: uppercase;
-            color: #7b8794;
-        }
-
-        .track-value {
-            font-weight: 600;
-            word-break: break-word;
-        }
-    </style>
+    @include('parcel.partials.tracking_styles')
 </head>
 <body>
 
@@ -213,6 +107,16 @@
             <div class="track-value" id="track_destination"></div>
             <div class="text-muted small mt-1" id="track_contact"></div>
         </div>
+    </div>
+
+    <div class="track-card">
+        <h6 class="font-weight-bold mb-3">{{ trans('lang.parcel_track_another') }}</h6>
+        {{-- PARCEL-MANAGEMENT-FLOW 4.5: the app tracks by tracking number too. --}}
+        <form method="GET" action="{{ route('parcel_tracking_lookup') }}" class="d-flex">
+            <input type="text" name="number" class="form-control mr-2" maxlength="40" required
+                   placeholder="{{ trans('lang.parcel_track_number_placeholder') }}" value="{{ $number ?? '' }}">
+            <button type="submit" class="btn btn-dark text-nowrap">{{ trans('lang.parcel_track_number_button') }}</button>
+        </form>
     </div>
 </div>
 
@@ -347,12 +251,23 @@
 
     /* The app's own step names, in plain words. A step not listed here is
      * shown as the app wrote it rather than hidden. */
+    /* Every step name the apps write (PARCEL-MANAGEMENT-FLOW 2.3), and the
+     * admin / pickup-point ones. */
     var HISTORY_LABELS = {
         'Created': "{{ trans('lang.parcel_step_registered') }}",
+        'Paid': "{{ trans('lang.parcel_history_paid') }}",
+        'Waiting drop-off': "{{ trans('lang.parcel_history_waiting_dropoff') }}",
         'Driver Assigned': "{{ trans('lang.parcel_history_driver_assigned') }}",
         'Collected': "{{ trans('lang.parcel_step_picked_up') }}",
+        'At origin pickup point': "{{ trans('lang.parcel_history_at_origin_point') }}",
+        'In transit': "{{ trans('lang.parcel_step_in_transit') }}",
         'In Transit': "{{ trans('lang.parcel_step_in_transit') }}",
-        'Delivered': "{{ trans('lang.parcel_step_delivered') }}"
+        'Arrived destination': "{{ trans('lang.parcel_history_arrived') }}",
+        'Out for delivery': "{{ trans('lang.parcel_history_out_for_delivery') }}",
+        'At destination pickup point': "{{ trans('lang.parcel_history_at_destination_point') }}",
+        'Delivered': "{{ trans('lang.parcel_step_delivered') }}",
+        'Returned': "{{ trans('lang.parcel_history_returned') }}",
+        'Cancelled': "{{ trans('lang.parcel_history_cancelled') }}"
     };
 
     function drawHistory(events) {

@@ -44,6 +44,7 @@ class Controller extends BaseController
         /* Public parcel tracking: the receiver has no address set and must
          * never be sent to choose one. */
         'parcel_tracking',
+        'parcel_tracking_lookup',
     ];
 
     /**

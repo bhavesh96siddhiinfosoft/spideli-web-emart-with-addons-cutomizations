@@ -71,6 +71,7 @@ Route::post('send-parcel-sms', [ParcelController::class, 'sendParcelSms'])->name
 Route::get('parcel_orders', [ParcelController::class, 'parcelOrders'])->name('parcel_orders');
 /* Public parcel tracking - the QR code on a receipt points here. No auth and
  * no location guard: the person scanning is the receiver, not the customer. */
+Route::get('track-parcel', [App\Http\Controllers\ParcelTrackingController::class, 'lookup'])->name('parcel_tracking_lookup');
 Route::get('track-parcel/{id}', [App\Http\Controllers\ParcelTrackingController::class, 'track'])->name('parcel_tracking');
 
 Route::post('find-rental-cars', [RentalController::class, 'findRentalCars'])->name('find_rental_cars');

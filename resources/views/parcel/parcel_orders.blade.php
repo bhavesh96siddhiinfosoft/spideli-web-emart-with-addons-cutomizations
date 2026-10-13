@@ -257,6 +257,141 @@
             '<div class="text-muted">{{ trans('lang.parcel_receiver_code_help') }}</div></div>';
     }
 
+    /* ---- The customer cancels a parcel (PARCEL-MANAGEMENT-FLOW 2.3, 6.2) ---
+     * Allowed until a driver accepts. Writes what the app writes on a customer
+     * cancel; a paid parcel is refunded to the wallet IN THE SAME transaction
+     * (the app refunds after it - a crash between the two loses the refund). */
+    var PARCEL_CUSTOMER_CANCELLABLE = ['Quote Requested', 'Order Placed', 'Driver Pending', 'Driver Rejected'];
+    var parcelOrdersById = {};
+    var parcelCancelId = '';
+
+    function parcelCancelButton(val) {
+        if (!val || PARCEL_CUSTOMER_CANCELLABLE.indexOf(val.status) === -1) {
+            return '';
+        }
+        parcelOrdersById[val.id] = val;
+        return '<button type="button" class="btn btn-outline-danger btn-sm ml-2 parcel-cancel-btn" data-cancel-id="' + val.id + '">' +
+            '<i class="fa fa-ban mr-1"></i>{{ trans('lang.parcel_customer_cancel') }}</button>';
+    }
+
+    function parcelPaidUpFront(o) {
+        return o.status !== 'Quote Requested' && o.payment_method !== 'cod' && o.paymentCollectByReceiver !== true;
+    }
+
+    $(document).on('click', '.parcel-cancel-btn', function () {
+        parcelCancelId = $(this).data('cancel-id');
+        if (!$('#parcelCancelModal').length) {
+            var reasons = [
+                "{{ trans('lang.parcel_cancel_reason_plans') }}",
+                "{{ trans('lang.parcel_cancel_reason_slow') }}",
+                "{{ trans('lang.parcel_cancel_reason_details') }}",
+                "{{ trans('lang.parcel_cancel_reason_mistake') }}"
+            ];
+            var options = reasons.map(function (r) { return '<option>' + r + '</option>'; }).join('') +
+                '<option value="other">{{ trans('lang.parcel_cancel_reason_other') }}</option>';
+            $('body').append(
+                '<div class="modal fade" id="parcelCancelModal" tabindex="-1" role="dialog" aria-hidden="true">' +
+                '<div class="modal-dialog modal-dialog-centered" role="document"><div class="modal-content">' +
+                '<div class="modal-header"><h5 class="modal-title">{{ trans('lang.parcel_customer_cancel_title') }}</h5>' +
+                '<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>' +
+                '<div class="modal-body">' +
+                '<div class="alert alert-danger py-2 small" id="parcelCancelError" style="display:none;"></div>' +
+                '<label class="font-weight-bold small" for="parcelCancelReason">{{ trans('lang.parcel_cancel_reason_label') }}</label>' +
+                '<select class="form-control mb-2" id="parcelCancelReason">' + options + '</select>' +
+                '<input type="text" class="form-control mb-2" id="parcelCancelOther" maxlength="200" style="display:none;">' +
+                '<p class="small text-muted mb-0" id="parcelCancelRefundNote"></p>' +
+                '</div><div class="modal-footer">' +
+                '<button type="button" class="btn btn-default" data-dismiss="modal">{{ trans('lang.parcel_cancel_keep') }}</button>' +
+                '<button type="button" class="btn btn-danger" id="parcelCancelConfirm">{{ trans('lang.parcel_customer_cancel') }}</button>' +
+                '</div></div></div></div>');
+        }
+        var o = parcelOrdersById[parcelCancelId] || {};
+        $('#parcelCancelError').hide();
+        $('#parcelCancelReason').val($('#parcelCancelReason option:first').val());
+        $('#parcelCancelOther').hide().val('');
+        $('#parcelCancelRefundNote').text(parcelPaidUpFront(o) ? "{{ trans('lang.parcel_cancel_refund_note') }}" : '');
+        $('#parcelCancelConfirm').prop('disabled', false);
+        $('#parcelCancelModal').modal('show');
+    });
+
+    $(document).on('change', '#parcelCancelReason', function () {
+        $('#parcelCancelOther').toggle($(this).val() === 'other');
+    });
+
+    /* What to refund: this order's wallet debits, else the total charged
+       online. Nothing when a refund row already exists. */
+    async function parcelRefundFor(o) {
+        if (!parcelPaidUpFront(o)) {
+            return 0;
+        }
+        var debited = 0, refunded = 0;
+        try {
+            var rows = await database.collection('wallet').where('order_id', '==', o.id).where('user_id', '==', user_uuid).get();
+            rows.docs.forEach(function (d) {
+                var w = d.data(), amt = parseFloat(w.amount) || 0;
+                if (w.isTopUp === true) { refunded += amt; } else { debited += amt; }
+            });
+        } catch (err) {
+            console.error('wallet rows could not be read', err);
+        }
+        if (refunded > 0) {
+            return 0;
+        }
+        if (debited > 0) {
+            return debited;
+        }
+        var total = o.priceBreakdown && parseFloat(o.priceBreakdown.total);
+        return total > 0 ? total : 0;
+    }
+
+    $(document).on('click', '#parcelCancelConfirm', async function () {
+        var reason = $('#parcelCancelReason').val() === 'other' ? $.trim($('#parcelCancelOther').val()) : $('#parcelCancelReason').val();
+        if (!reason) {
+            $('#parcelCancelError').text("{{ trans('lang.parcel_cancel_reason_required') }}").show();
+            return;
+        }
+        var $b = $(this).prop('disabled', true);
+        var docRef = database.collection('parcel_orders').doc(parcelCancelId);
+        try {
+            var before = await docRef.get();
+            var refund = before.exists ? await parcelRefundFor(Object.assign({ id: parcelCancelId }, before.data())) : 0;
+            await database.runTransaction(async function (tx) {
+                var snap = await tx.get(docRef);
+                var o = snap.exists ? snap.data() : null;
+                if (!o || o.authorID !== user_uuid || PARCEL_CUSTOMER_CANCELLABLE.indexOf(o.status) === -1) {
+                    throw new Error("{{ trans('lang.parcel_cancel_too_late') }}");
+                }
+                var name = (o.author && ((o.author.firstName || '') + ' ' + (o.author.lastName || '')).trim()) || '';
+                var update = {
+                    status: 'Order Cancelled', parcelStatus: 'Cancelled',
+                    cancelReason: reason, cancelReasonCode: reason, cancelledBy: 'customer', cancelledByName: name,
+                    cancelledAt: firebase.firestore.FieldValue.serverTimestamp(), cancelAction: 'cancelled',
+                    driverId: null, driverID: null,
+                    trackingEvents: firebase.firestore.FieldValue.arrayUnion({
+                        status: 'Cancelled', at: firebase.firestore.Timestamp.now(), by: user_uuid, role: 'customer', note: reason
+                    })
+                };
+                if (refund > 0 && parcelPaidUpFront(o)) {
+                    var walletId = database.collection('wallet').doc().id;
+                    tx.set(database.collection('wallet').doc(walletId), {
+                        id: walletId, user_id: user_uuid, order_id: parcelCancelId, amount: refund, isTopUp: true,
+                        payment_method: 'wallet', payment_status: 'success', transactionUser: 'customer',
+                        note: 'Refund for cancelled parcel order', date: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    tx.update(database.collection('users').doc(user_uuid), {
+                        wallet_amount: firebase.firestore.FieldValue.increment(refund)
+                    });
+                }
+                tx.update(docRef, update);
+            });
+            $('#parcelCancelModal').modal('hide');
+            window.location.reload();
+        } catch (err) {
+            $('#parcelCancelError').text(err && err.message ? err.message : String(err)).show();
+            $b.prop('disabled', false);
+        }
+    });
+
     function parcelTrackUrl(id) {
         return "{{ route('parcel_tracking', ':id') }}".replace(':id', id);
     }
@@ -587,7 +722,7 @@
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
                     html = html + parcelReceiverCodeHtml(val);
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
-                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + parcelCancelButton(val) + '</div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';
@@ -627,7 +762,10 @@
         });
         alldata.forEach((listval) => {
             var val = listval;
-            if (val.status == "Order Placed" || val.status == "Order Accepted" || val.status == "Driver Pending" || val.status == "Order Shipped" || val.status == "In Transit" || val.status == "Driver Accepted") {
+            /* "Driver Rejected" means the parcel is being offered to the next
+               driver, and "Quote Requested" waits for its price - both are in
+               progress, not over (PARCEL-MANAGEMENT-FLOW 2.3). */
+            if (val.status == "Quote Requested" || val.status == "Order Placed" || val.status == "Order Accepted" || val.status == "Driver Pending" || val.status == "Driver Rejected" || val.status == "Order Shipped" || val.status == "In Transit" || val.status == "Driver Accepted") {
                 var order_id = val.id;
                 
                 html = html + '<div class="parcel_order-listing-row mb-4"><div class="parcel_order-listing"><div class="parcel_payment_left"><div class="card"><div class="row mb-4">';
@@ -781,7 +919,7 @@
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
                     html = html + parcelReceiverCodeHtml(val);
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
-                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + parcelCancelButton(val) + '</div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';
@@ -808,7 +946,7 @@
         alldata.forEach((listval) => {
             var val = listval;
             var order_id = val.id;
-            if (val.status == "Order Cancelled" || val.status == "Driver Rejected" || val.status == "Order Rejected") {
+            if (val.status == "Order Cancelled" || val.status == "Order Rejected") {
                 var order_id = val.id;
                 html = html + '<div class="parcel_order-listing-row mb-4"><div class="parcel_order-listing"><div class="parcel_payment_left"><div class="card"><div class="row mb-4">';
                 html = html + '<div class="col-md-7 order-top-left"><div class="parcel_payment-detail"><div class="sender-det"><h3><strong>' + val.sender.name + '</strong></h3> <p>' + val.sender.phone + '</p><p>' + val.sender.address + '</p></div>';
@@ -961,7 +1099,7 @@
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
                     html = html + parcelReceiverCodeHtml(val);
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
-                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
+                        '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + parcelCancelButton(val) + '</div>';
                 html = html + '</div>';
                 if(val.driverId && val.driver){
                     let driverDetail = '';

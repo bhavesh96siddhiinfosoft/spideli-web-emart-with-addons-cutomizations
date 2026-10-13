@@ -26,4 +26,30 @@ class ParcelTrackingController extends Controller
     {
         return view('parcel.tracking', ['id' => $id]);
     }
+
+    /**
+     * Track by tracking number. The number is looked up server-side and the
+     * visitor is sent to the parcel's own page; nothing about a parcel is
+     * shown here, so a wrong guess learns nothing but "not found".
+     */
+    public function lookup(\Illuminate\Http\Request $request)
+    {
+        $number = strtoupper(trim((string) $request->query('number', '')));
+        if ($number === '') {
+            return view('parcel.track_lookup', ['number' => '', 'notFound' => false]);
+        }
+
+        $found = preg_match('/^[A-Z0-9-]{4,40}$/', $number)
+            ? \App\Helpers\FirestoreHelper::queryCollection('parcel_orders', 'trackingNumber', 'EQUAL', $number)
+            : [];
+        if (is_array($found) && count($found) > 0) {
+            $parcel = reset($found);
+            $id = $parcel['id'] ?? '';
+            if ($id !== '') {
+                return redirect()->route('parcel_tracking', $id);
+            }
+        }
+
+        return view('parcel.track_lookup', ['number' => $number, 'notFound' => true]);
+    }
 }
