@@ -246,6 +246,17 @@
      * carries, and a way to open or copy it - to show the receiver, print, or
      * send. The QR is the SAME value as the receipt's (qrValue), so a code
      * scanned from either opens the same public tracking page. */
+    /* The receiver code (PARCEL-MANAGEMENT-FLOW.md 4.3): the receiver gives it
+     * to the driver, who must type it to deliver. The sender passes it on. */
+    function parcelReceiverCodeHtml(val) {
+        if (!val || !val.pickupCode) {
+            return '';
+        }
+        return '<div class="col-md-12 mt-2 small"><span class="font-weight-bold">{{ trans('lang.parcel_receiver_code') }}:</span> ' +
+            '<span class="badge badge-light border px-2" style="font-size:1rem;letter-spacing:2px;">' + $('<span>').text(val.pickupCode).html() + '</span>' +
+            '<div class="text-muted">{{ trans('lang.parcel_receiver_code_help') }}</div></div>';
+    }
+
     function parcelTrackUrl(id) {
         return "{{ route('parcel_tracking', ':id') }}".replace(':id', id);
     }
@@ -574,6 +585,7 @@
                 }
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
+                    html = html + parcelReceiverCodeHtml(val);
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
                         '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
                 html = html + '</div>';
@@ -767,6 +779,7 @@
                 }
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
+                    html = html + parcelReceiverCodeHtml(val);
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
                         '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
                 html = html + '</div>';
@@ -946,6 +959,7 @@
                 }
                 html = html + '<div class="row mt-3">';
                     html = html + '<div class="col-md-12 parcel_payment-box"><span class="label">Parcel Images</span>'+parcelImage+'</div>'; 
+                    html = html + parcelReceiverCodeHtml(val);
                     html = html + '<div class="col-md-12 mt-2"><button type="button" class="btn btn-outline-primary btn-sm download-receipt-btn" data-receipt-id="' + order_id + '">' +
                         '<i class="fa fa-download mr-1"></i>{{ trans('lang.receipt_download') }}</button>' + parcelTrackButton(order_id) + '</div>';
                 html = html + '</div>';

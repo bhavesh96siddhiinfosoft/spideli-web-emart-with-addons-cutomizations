@@ -191,7 +191,11 @@
                             order_json.sendReceiverSms ? order_json.smsCharge : 0),
                         /* Parcel tracking - QR, tracking number, history (as the app) */
                         ...parcelTrackingFields(id_order, order_json.authorID),
+                        /* The rest of the app's flow fields - paid online, so "Paid" */
+                        ...parcelFlowFields(cart, id_order, order_json.authorID, receiverObject, isSchedule, true),
                     }).then(function (result) {
+                        parcelAfterSave(Object.assign({ id: id_order, authorID: order_json.authorID },
+                            (cart && cart.parcelOrderFields) || {}, { trackingNumber: lastParcelTrackingNumber }), '');
                         $.ajax({
                             type: 'POST',
                             url: "<?php echo route('parcel_order_complete'); ?>",

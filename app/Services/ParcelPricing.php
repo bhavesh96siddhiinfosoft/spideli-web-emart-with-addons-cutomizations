@@ -167,6 +167,12 @@ class ParcelPricing
             return false;
         }
 
+        /* As the app (PARCEL-MANAGEMENT-FLOW.md 1.3): a carrier explicitly
+         * marked unverified is not offered; a missing flag counts as verified. */
+        if (($carrier['isVerified'] ?? true) === false) {
+            return false;
+        }
+
         /* Agreed 12 Oct, decision 3: only the customer's region. A carrier
          * with no regions serves everywhere. */
         $regions = $carrier['regionIds'] ?? [];
@@ -307,6 +313,8 @@ class ParcelPricing
                 'type' => 'carrier',
                 'carrierId' => $carrier['id'] ?? '',
                 'carrierName' => $carrier['name'] ?? '',
+                /* The company account that receives this carrier's parcels. */
+                'carrierOwnerId' => $carrier['ownerId'] ?? '',
                 'photo' => $carrier['photo'] ?? '',
                 'eta' => [
                     'min' => self::num($carrier['minDeliveryTime'] ?? null),

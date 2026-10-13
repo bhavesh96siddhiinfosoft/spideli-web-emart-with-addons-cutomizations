@@ -1125,4 +1125,6 @@ return [
     'order_history_status' => 'Status',
     'order_history_status_all' => 'All statuses',
     'order_history_print_status' => 'Status',
+    'parcel_receiver_code' => 'Receiver code',
+    'parcel_receiver_code_help' => 'Give this code to the receiver. The driver asks for it at delivery.',
 ];

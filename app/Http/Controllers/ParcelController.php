@@ -306,6 +306,11 @@ class ParcelController extends Controller
             'pickupPointId' => $details['pickupPointId'] ?? '',
             'carrierId' => $quote['carrierId'],
             'carrierName' => $quote['carrierName'],
+            /* PARCEL-MANAGEMENT-FLOW.md 1.4: a company parcel names its owner
+               twice, as the app writes it - the company app looks for its
+               parcels by these. Empty for Spideli drivers. */
+            'carrierOwnerId' => $quote['carrierOwnerId'] ?? '',
+            'companyOwnerId' => $quote['carrierOwnerId'] ?? '',
             'regionId' => $details['regionId'] ?? '',
             'origin' => $details['origin'] ?? null,
             'destination' => $details['destination'] ?? null,
@@ -314,6 +319,57 @@ class ParcelController extends Controller
         return $cart;
     }
    
+    /**
+     * The push to a delivery company's owner when a parcel is booked with it
+     * (PARCEL-MANAGEMENT-FLOW.md 7.2, row 1). The data `type` is what the
+     * company app opens its Orders screen on - the generic push route sends
+     * fixed data, so this one exists. The text comes from the admin's
+     * `carrier_parcel_order` template, read by the page.
+     */
+    public function parcelOwnerPush(Request $request)
+    {
+        $token = (string) $request->input('fcm', '');
+        $orderId = (string) $request->input('orderId', '');
+        if ($token === '' || $orderId === '' || !\Storage::disk('local')->has('firebase/credentials.json')) {
+            return response()->json(['success' => false]);
+        }
+
+        $client = new \Google_Client();
+        $client->setAuthConfig(storage_path('app/firebase/credentials.json'));
+        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+        $client->refreshTokenWithAssertion();
+        $accessToken = $client->getAccessToken()['access_token'] ?? '';
+        if ($accessToken === '') {
+            return response()->json(['success' => false]);
+        }
+
+        $payload = [
+            'message' => [
+                'token' => $token,
+                'notification' => [
+                    'title' => (string) $request->input('title', ''),
+                    'body' => (string) $request->input('message', ''),
+                ],
+                'data' => [
+                    'type' => 'carrier_parcel_order',
+                    'orderId' => $orderId,
+                    'trackingNumber' => (string) $request->input('trackingNumber', ''),
+                ],
+                'android' => ['notification' => ['channel_id' => 'driver_jobs']],
+            ],
+        ];
+
+        $ch = curl_init('https://fcm.googleapis.com/v1/projects/' . env('FIREBASE_PROJECT_ID') . '/messages:send');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Authorization: Bearer ' . $accessToken]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        $result = curl_exec($ch);
+        curl_close($ch);
+
+        return response()->json(['success' => $result !== false]);
+    }
+
     function distance($lat1, $lon1, $lat2, $lon2)
     {
         $earthRadius = 6371;

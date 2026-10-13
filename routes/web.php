@@ -56,6 +56,7 @@ Route::get('parcel/{id}', [ParcelController::class, 'parcel'])->name('parcel');
 Route::get('parcel_checkout', [ParcelController::class, 'parcelCheckout'])->name('parcel_checkout');
 Route::post('parcel_cart', [ParcelController::class, 'parcelCart'])->name('parcel_cart');
 Route::post('parcel_select_carrier', [ParcelController::class, 'selectParcelCarrier'])->name('parcel_select_carrier');
+Route::post('parcel_owner_push', [ParcelController::class, 'parcelOwnerPush'])->name('parcel_owner_push');
 Route::post('parcel_order_proccessing', [ParcelController::class, 'parcelOrderProccessing'])->name('parcel_order_proccessing');
 Route::get('process_parcel_order_pay', [ParcelController::class, 'processParcelOrderPay'])->name('process_parcel_order_pay');
 Route::post('parcel_razorpay_payment', [ParcelController::class, 'parcelRazorpayPayment'])->name('parcel_razorpay_payment');

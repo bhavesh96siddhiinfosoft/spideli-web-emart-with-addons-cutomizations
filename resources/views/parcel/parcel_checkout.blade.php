@@ -1807,7 +1807,13 @@ session_start();
                     ...p41OrderFields(cart, total_pay, sendReceiverSms ? smsCharge : 0),
                     /* Parcel tracking - QR, tracking number, history (as the app) */
                     ...parcelTrackingFields(id_order, authorID),
+                    /* The rest of the app's flow fields - receiver code, owner, ... */
+                    ...parcelFlowFields(cart, id_order, authorID, receiverObject, isSchedule,
+                        payment_method !== 'cod' && !paymentCollectByReceiver),
                 }).then(function (result) {
+                    parcelAfterSave(Object.assign({ id: id_order, authorID: authorID },
+                        (cart && cart.parcelOrderFields) || {}, { trackingNumber: lastParcelTrackingNumber }),
+                        (userDetails && ((userDetails.firstName || '') + ' ' + (userDetails.lastName || '')).trim()) || '');
 
                     $.ajax({
                         type: 'POST',

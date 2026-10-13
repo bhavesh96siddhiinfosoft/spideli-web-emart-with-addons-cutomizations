@@ -940,4 +940,6 @@ return [
     'order_history_status' => 'الحالة',
     'order_history_status_all' => 'كل الحالات',
     'order_history_print_status' => 'الحالة',
+    'parcel_receiver_code' => 'رمز المستلم',
+    'parcel_receiver_code_help' => 'أعطِ هذا الرمز للمستلم. سيطلبه السائق عند التسليم.',
 ];
