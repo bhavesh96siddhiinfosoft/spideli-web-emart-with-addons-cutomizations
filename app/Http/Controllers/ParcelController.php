@@ -258,7 +258,17 @@ class ParcelController extends Controller
         $carriers = FirestoreHelper::getCollection('delivery_carriers?pageSize=300') ?: [];
         $bands = FirestoreHelper::getCollection('parcel_weight?pageSize=300') ?: [];
 
+        /* W8 - the commission on a delivery company's price (all three
+           switches, see ParcelPricing::commissionRule()). */
+        $sectionId = (string) ($cart['section_id'] ?? '');
+        $commission = ParcelPricing::commissionRule(
+            FirestoreHelper::getDocument('settings/AdminCommission') ?: null,
+            FirestoreHelper::getDocument('settings/ParcelPricing') ?: null,
+            $sectionId !== '' ? (FirestoreHelper::getDocument('sections/' . $sectionId) ?: null) : null
+        );
+
         return ParcelPricing::quotes([
+            'commission' => $commission,
             'regionId' => $details['regionId'],
             'scope' => $details['scope'],
             'km' => (float) $km,

@@ -109,8 +109,11 @@
             @if(($p41Breakdown['fixedTax'] ?? 0) > 0)
                 <div class="d-flex"><span>{{ ($p41Details['scope'] ?? '') === 'intercountry' ? trans('lang.parcel_fixed_intercountry') : trans('lang.parcel_fixed_intercity') }}</span><span class="ml-auto">+{{ formatCurrency($p41Breakdown['fixedTax'], $p41Currency) }}</span></div>
             @endif
+            @if(($p41Breakdown['commission'] ?? 0) > 0)
+                <div class="d-flex"><span>{{ trans('lang.parcel_commission_line') }}</span><span class="ml-auto">+{{ formatCurrency($p41Breakdown['commission'], $p41Currency) }}</span></div>
+            @endif
             <hr class="my-2">
-            <div class="d-flex font-weight-bold"><span>{{ trans('lang.parcel_shipping_total') }}</span><span class="ml-auto" style="color:#D17E19;">{{ formatCurrency(($p41Breakdown['carrierPrice'] ?? 0) + ($p41Breakdown['options'] ?? 0) + ($p41Breakdown['fixedTax'] ?? 0), $p41Currency) }}</span></div>
+            <div class="d-flex font-weight-bold"><span>{{ trans('lang.parcel_shipping_total') }}</span><span class="ml-auto" style="color:#D17E19;">{{ formatCurrency(($p41Breakdown['carrierPrice'] ?? 0) + ($p41Breakdown['options'] ?? 0) + ($p41Breakdown['fixedTax'] ?? 0) + ($p41Breakdown['commission'] ?? 0), $p41Currency) }}</span></div>
         </div>
     @endif
 </div>

@@ -1153,4 +1153,5 @@ return [
     'parcel_cancel_refund_note' => 'What you paid is returned to your wallet.',
     'parcel_cancel_keep' => 'Keep the parcel',
     'parcel_cancel_too_late' => 'This parcel can no longer be cancelled - a driver has already accepted it.',
+    'parcel_commission_line' => 'Platform commission',
 ];

@@ -331,6 +331,13 @@ session_start();
                                     <span class="price ml-auto">+{{ formatCurrency($p41Totals['options'], $parcel_cart['currencyData']) }}</span>
                                 </div>
                             @endif
+                            @if($p41Totals && ($p41Totals['commission'] ?? 0) > 0)
+                                {{-- W8: the commission on the company's price, untaxed. --}}
+                                <div class="payment-total d-flex">
+                                    <label>{{ trans('lang.parcel_commission_line') }}</label>
+                                    <span class="price ml-auto">+{{ formatCurrency($p41Totals['commission'], $parcel_cart['currencyData']) }}</span>
+                                </div>
+                            @endif
                             @if($p41Totals && ($p41Totals['fixedTax'] ?? 0) > 0)
                                 <div class="payment-total d-flex">
                                     <label>{{ (($parcel_cart['parcelDetails']['scope'] ?? '') === 'intercountry') ? trans('lang.parcel_fixed_intercountry') : trans('lang.parcel_fixed_intercity') }}</label>

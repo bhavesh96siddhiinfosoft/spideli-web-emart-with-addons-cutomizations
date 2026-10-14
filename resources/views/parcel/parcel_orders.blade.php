@@ -168,13 +168,14 @@
     function p41OrderExtras(val) {
         var b = (val && val.priceBreakdown) || {};
         var n = function (v) { var x = parseFloat(v); return isNaN(x) ? 0 : x; };
-        var options = n(b.options), fixedTax = n(b.fixedTax), extraKg = n(b.extraKgCharge);
+        var options = n(b.options), fixedTax = n(b.fixedTax), extraKg = n(b.extraKgCharge), commission = n(b.commission);
         return {
             options: options,
             fixedTax: fixedTax,
+            commission: commission,
             extraKgCharge: extraKg,
             scope: (val && val.scope) || '',
-            total: options + fixedTax + extraKg
+            total: options + fixedTax + extraKg + commission
         };
     }
 
@@ -193,6 +194,7 @@
         if (extras.options > 0) { html += row("{{ trans('lang.parcel_options_charge') }}", extras.options); }
         if (extras.fixedTax > 0) { html += row(p41FixedLabel(extras), extras.fixedTax); }
         if (extras.extraKgCharge > 0) { html += row("{{ trans('lang.parcel_extra_kg_charge') }}", extras.extraKgCharge); }
+        if (extras.commission > 0) { html += row("{{ trans('lang.parcel_commission_line') }}", extras.commission); }
         return html;
     }
 
@@ -214,6 +216,7 @@
         if (figures.p41) {
             add("{{ trans('lang.parcel_options_charge') }}", figures.p41.options);
             add(p41FixedLabel(figures.p41), figures.p41.fixedTax);
+            add("{{ trans('lang.parcel_commission_line') }}", figures.p41.commission);
             add("{{ trans('lang.parcel_extra_kg_charge') }}", figures.p41.extraKgCharge);
         }
         add("{{ trans('lang.tax') }}", figures.tax);

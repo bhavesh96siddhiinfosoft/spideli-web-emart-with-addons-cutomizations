@@ -199,6 +199,31 @@ class ParcelPricing
      *
      *  $ctx: regionId, scope, km, weightKg (nullable), dimensions (nullable),
      *        selectedBandId, pickupMethod, deliveryMethod, currency (code). */
+    /**
+     * The commission added on top of a delivery company's parcel price, or
+     * null. All three must be on (client + app developer, 14 Oct):
+     *   settings/AdminCommission.isEnabled      - the global switch, master of
+     *                                             every section commission
+     *   settings/ParcelPricing.commissionAsExtra - "Parcel and mail" switch
+     *   the parcel section's adminCommision.enable
+     * Returns ['type' => 'percentage'|'fixed', 'value' => number].
+     */
+    public static function commissionRule(?array $global, ?array $parcelPricing, ?array $section): ?array
+    {
+        if (($global['isEnabled'] ?? false) !== true || ($parcelPricing['commissionAsExtra'] ?? false) !== true) {
+            return null;
+        }
+        $c = $section['adminCommision'] ?? null;
+        if (!is_array($c) || ($c['enable'] ?? false) !== true) {
+            return null;
+        }
+        $value = self::num($c['commission'] ?? null);
+        if ($value === null || $value <= 0) {
+            return null;
+        }
+        return ['type' => strtolower((string) ($c['type'] ?? '')) === 'fixed' ? 'fixed' : 'percentage', 'value' => $value];
+    }
+
     public static function quotes(array $ctx, ?array $region, array $carriers, array $bands): array
     {
         $regionId = (string) ($ctx['regionId'] ?? '');
@@ -235,6 +260,20 @@ class ParcelPricing
                 $deliveryMethod === 'home' ? 'homeDeliveryCharge' : 'pointCollectionCharge');
             $options = round($pickupCharge + $deliveryCharge, 2);
 
+            /* W8 (app developer, 14 Oct): on a DELIVERY COMPANY's price only,
+             * when $ctx['commission'] is set (see commissionRule()): the
+             * section's type and value, on the company's BASE price only -
+             * not on the options or the fixed charge - and untaxed, so it is
+             * added with them after tax. Spideli drivers never pay it. */
+            $commission = 0.0;
+            $rule = $ctx['commission'] ?? null;
+            if ($carrierRow !== null && is_array($rule)) {
+                $commission = ($rule['type'] ?? '') === 'fixed'
+                    ? round((float) ($rule['value'] ?? 0), 2)
+                    : round($price * (float) ($rule['value'] ?? 0) / 100, 2);
+                $commission = max(0.0, $commission);
+            }
+
             return [
                 'priceBreakdown' => [
                     'source' => $source,
@@ -249,9 +288,9 @@ class ParcelPricing
                     'pickupCharge' => round($pickupCharge, 2),
                     'deliveryCharge' => round($deliveryCharge, 2),
                     'fixedTax' => round($fixedTax, 2),
-                    'commission' => 0,
+                    'commission' => $commission,
                 ],
-                'extras' => round($options + $fixedTax, 2),
+                'extras' => round($options + $fixedTax + $commission, 2),
                 'band' => $band ? ['id' => $band['id'] ?? '', 'title' => $band['title'] ?? '',
                                    'delivery_charge' => self::num($band['delivery_charge'] ?? null) ?? 0] : null,
             ];

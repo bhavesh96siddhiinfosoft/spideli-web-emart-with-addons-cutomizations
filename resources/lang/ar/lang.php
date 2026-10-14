@@ -968,4 +968,5 @@ return [
     'parcel_cancel_refund_note' => 'يُعاد ما دفعته إلى محفظتك.',
     'parcel_cancel_keep' => 'الإبقاء على الطرد',
     'parcel_cancel_too_late' => 'لم يعد بالإمكان إلغاء هذا الطرد - قبله سائق بالفعل.',
+    'parcel_commission_line' => 'عمولة المنصة',
 ];
