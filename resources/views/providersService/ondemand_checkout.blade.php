@@ -182,7 +182,7 @@
     async function getAdminCommission() {
         database.collection('sections').doc(section_id).get().then(async function(AdminCommissionSnapshots) {
             if (AdminCommissionSnapshots.exists) {
-                var AdminCommissionRes = AdminCommissionSnapshots.data().adminCommision;
+                var AdminCommissionRes = await sectionCommissionEffective(AdminCommissionSnapshots.data().adminCommision);
                 var AdminCommissionValueBase = AdminCommissionRes.commission;
                 var AdminCommissionTypeBase = AdminCommissionRes.type;
                 if (AdminCommissionRes.enable && provider_id) {

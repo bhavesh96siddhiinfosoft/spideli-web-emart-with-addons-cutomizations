@@ -133,7 +133,7 @@
     adminCommissionRef.get().then(async function (AdminCommissionSnapshots) {
         if (AdminCommissionSnapshots.docs.length > 0) {
             AdminCommissionRes = AdminCommissionSnapshots.docs[0].data();
-            var data = AdminCommissionRes.adminCommision;
+            var data = await sectionCommissionEffective(AdminCommissionRes.adminCommision);
             if (data.enable) {
                 adminCommission = data.commission;
                 commissionType = data.type;

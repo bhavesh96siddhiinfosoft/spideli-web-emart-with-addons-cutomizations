@@ -2474,6 +2474,36 @@
     }
     ?>
     var database = firebase.firestore();
+
+    /* ---- The global Admin Commission switch (client, 14 Oct, option A) -----
+     * Settings > Admin Commission > "Enable Admin Commission" is the MASTER of
+     * ALL admin commission - the section's, and a store's or provider's own
+     * rate. When it is off, the section's commission is passed on switched OFF
+     * (enable false, commission 0); every place that adds a store's or
+     * provider's own rate already requires the section's to be on, so no
+     * commission is charged anywhere. When it is on, nothing changes.
+     * Spec for the apps: admin docs/APP-SPEC-GLOBAL-COMMISSION-SWITCH.md.
+     * Read once per page; a missing document or field means OFF. */
+    var globalAdminCommissionPromise = null;
+
+    function globalAdminCommissionOn() {
+        if (!globalAdminCommissionPromise) {
+            globalAdminCommissionPromise = database.collection('settings').doc('AdminCommission').get()
+                .then(function (snap) { return !!(snap.exists && snap.data().isEnabled === true); })
+                .catch(function (err) { console.error('global commission switch could not be read', err); return false; });
+        }
+        return globalAdminCommissionPromise;
+    }
+
+    async function sectionCommissionEffective(sectionCommission) {
+        if (!sectionCommission || typeof sectionCommission !== 'object') {
+            return sectionCommission;
+        }
+        if (await globalAdminCommissionOn()) {
+            return sectionCommission;
+        }
+        return Object.assign({}, sectionCommission, { enable: false, commission: 0 });
+    }
     var placeholderImageHeader = '';
     var googleMapKeySettingHeader = database.collection('settings').doc("googleMapKey");
     googleMapKeySettingHeader.get().then(async function(googleMapKeySnapshotsHeader) {
@@ -2528,7 +2558,9 @@
              * signed-in customer's name and avatar. A stale cookie must not
              * cost a visitor their header. */
             if (adminCommissionSettings) {
-                localStorage.setItem('adminCommissionSettings', JSON.stringify(adminCommissionSettings.adminCommision));
+                /* The section's commission as it applies today - see
+                   sectionCommissionEffective(). Prices read it from here. */
+                localStorage.setItem('adminCommissionSettings', JSON.stringify(await sectionCommissionEffective(adminCommissionSettings.adminCommision)));
                 localStorage.setItem('platformFeeSettings', JSON.stringify(adminCommissionSettings.platformFee));
                 localStorage.setItem('packagingChargeEnable', adminCommissionSettings.packagingChargeEnable);
             } else {

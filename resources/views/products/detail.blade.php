@@ -954,7 +954,19 @@
         vendorSnapshots = await vendorDetailsRef.get();/*.then(async function (vendorSnapshots) {*/
             var vendorDetails = vendorSnapshots.docs[0].data();   
              
-            adminCommissionSettings = vendorDetails.adminCommission || adminCommissionSettings;
+            /* The store's own rate only while the section's commission applies
+               (which the global switch decides - see sectionCommissionEffective
+               in the footer). The stored setting is text: it used to be
+               compared as text, so the section's rate never applied here. */
+            var sectionCommissionNow = null;
+            try {
+                sectionCommissionNow = JSON.parse(localStorage.getItem('adminCommissionSettings') || 'null');
+            } catch (e) {
+                sectionCommissionNow = null;
+            }
+            adminCommissionSettings = (sectionCommissionNow && sectionCommissionNow.enable === true)
+                ? (vendorDetails.adminCommission || sectionCommissionNow)
+                : sectionCommissionNow;
          
             if(packagingChargeEnable){
                 packagingCharge = vendorDetails.packagingCharge ?? '0';

@@ -828,12 +828,15 @@ session_start();
 
                         database.collection('sections').where('id', '==', section_id).get().then(function(querySnapshot) {
                         if (!querySnapshot.empty) {
-                            querySnapshot.forEach(function(doc) {
-                                const AdminCommissionRes = doc.data();                                
-                                
-                                var AdminCommissionValueBase = AdminCommissionRes.adminCommision.commission;
-                                var AdminCommissionTypeBase = AdminCommissionRes.adminCommision.type;
-                                
+                            querySnapshot.forEach(async function(doc) {
+                                /* The global switch applies; and the flag is on
+                                   adminCommision - `.enable` on the section was
+                                   always undefined, so this never applied. */
+                                const AdminCommissionRes = (await sectionCommissionEffective(doc.data().adminCommision)) || {};
+
+                                var AdminCommissionValueBase = AdminCommissionRes.commission;
+                                var AdminCommissionTypeBase = AdminCommissionRes.type;
+
                                 if (AdminCommissionRes.enable) {
                                     $("#adminCommission").val(AdminCommissionValueBase);
                                     $("#adminCommissionType").val(AdminCommissionTypeBase);
@@ -904,8 +907,8 @@ session_start();
     AdminCommission.get().then(async function (AdminCommissionSnapshots) {
         if (AdminCommissionSnapshots.docs.length > 0) {
             AdminCommissionRes = AdminCommissionSnapshots.docs[0].data();
-            var data = AdminCommissionRes.adminCommision;
-            if (data.enable) {
+            var data = await sectionCommissionEffective(AdminCommissionRes.adminCommision);
+            if (data && data.enable) {
                 AdminCommission = data.commission;
                 commissionType = data.type;
                 $("#adminCommission").val(AdminCommission);
