@@ -156,7 +156,11 @@ foreach ($countries as $keycountry => $valuecountry) {
         firebase.auth().signInWithEmailAndPassword(email, password).then(function (result) {
             var userEmail = result.user.email;
             database.collection("users").where("email", "==", userEmail).get().then(async function (snapshots) {
-                var userData = snapshots.docs[0].data();
+                /* A deleted customer's profile is kept (isDeleted): skip it and use
+                 * this account's own profile. */
+                var live = snapshots.docs.filter(function (d) { return !d.data().isDeleted; });
+                var own = live.find(function (d) { return d.id === result.user.uid; }) || live[0];
+                var userData = own ? own.data() : {};
                 if (userData.role == "customer" && userData.active == true) {
                     var userToken = result.user.getIdToken();
                     var uid = result.user.uid;
@@ -223,8 +227,9 @@ foreach ($countries as $keycountry => $valuecountry) {
         if (jQuery("#phone").val() && jQuery("#country_selector").val()) {
             var phoneNumber = '+' + jQuery("#country_selector").val() + '' + jQuery("#phone").val();
             database.collection("users").where("phoneNumber", "==", jQuery("#phone").val()).where("role", "==", 'customer').get().then(async function (snapshots) {
-                if (snapshots.docs.length) {
-                    var userData = snapshots.docs[0].data();
+                var live = snapshots.docs.filter(function (d) { return !d.data().isDeleted; });   // a deleted customer's kept profile does not count
+                if (live.length) {
+                    var userData = live[0].data();
                     if (userData.active == true) {
                         firebase.auth().signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier)
                             .then(function (confirmationResult) {
@@ -250,7 +255,9 @@ foreach ($countries as $keycountry => $valuecountry) {
         window.confirmationResult.confirm(document.getElementById("verificationcode").value)
             .then(function (result) {
                 database.collection("users").where('phoneNumber', '==', jQuery("#phone").val()).where("role", "==", 'customer').get().then(async function (snapshots_login) {
-                    userData = snapshots_login.docs[0].data();
+                    var live = snapshots_login.docs.filter(function (d) { return !d.data().isDeleted; });   // skip a deleted customer's kept profile
+                    var own = live.find(function (d) { return d.id === result.user.uid; }) || live[0];
+                    userData = own ? own.data() : null;
                     if (userData) {
                         if (userData.role == "customer") {
                             var uid = result.user.uid;

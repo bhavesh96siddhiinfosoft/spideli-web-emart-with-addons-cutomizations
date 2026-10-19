@@ -167,14 +167,16 @@ foreach ($countries as $keycountry => $valuecountry) {
         var loginType = $("#hidden_loginType").val();
         var existingUUID = $("#hidden_uuid").val();
 
+        /* A deleted customer's profile is kept as history (isDeleted): it does not
+         * hold the e-mail or phone, so that person can register again. */
         const emailCheck = await database.collection("users").where('email', '==', email).get();
-        if (emailCheck.docs.length > 0) {
+        if (emailCheck.docs.filter(function (d) { return !d.data().isDeleted; }).length > 0) {
             alert("{{trans('lang.already_account_with_same_email')}}");
             return false;
         }
 
         const phoneCheck = await database.collection("users").where("role", "==", 'customer').where('phoneNumber', '==', phoneNumber).get();
-        if (phoneCheck.docs.length > 0) {
+        if (phoneCheck.docs.filter(function (d) { return !d.data().isDeleted; }).length > 0) {
             alert("{{trans('lang.already_account_with_same_phone')}}");
             return false;
         }
@@ -514,7 +516,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             }else {
                 database.collection("users").where("role", "==", 'customer').where('phoneNumber', '==', jQuery("#mobileNumber").val()).get().then(async function (snapshots) {
                     $("#field_error1").css('display','none');
-                    if (snapshots.docs.length > 0) {
+                    if (snapshots.docs.filter(function (d) { return !d.data().isDeleted; }).length > 0) {   // a deleted customer's kept profile does not hold the phone
                         alert("{{trans('lang.already_account_with_same_phone')}}");
                         return false;
                     } else {

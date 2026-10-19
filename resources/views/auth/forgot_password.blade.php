@@ -73,7 +73,7 @@ foreach ($countries as $keycountry => $valuecountry) {
             $('#email_address_error').html("{{trans('lang.email_address_error')}}");
         } else {
             database.collection("users").where("email", "==", email_address).where('role', '==', 'customer').get().then(async function (snapshots) {
-                if (snapshots.docs.length > 0) {
+                if (snapshots.docs.filter(function (d) { return !d.data().isDeleted; }).length > 0) {   // not a deleted customer's kept profile
                     firebase.auth().sendPasswordResetEmail(email_address).then((result) => {
                         $('#authentication_error').html("{{trans('lang.email_sent')}}");
                     }).catch((error) => {
