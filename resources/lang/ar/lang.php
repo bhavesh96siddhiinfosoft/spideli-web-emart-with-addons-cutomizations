@@ -972,4 +972,8 @@ return [
     'checkout_need_anything_else' => 'هل تحتاج شيئاً آخر؟',
     'checkout_add_more_items' => 'أضف المزيد من المنتجات إن أردت.',
     'checkout_add_more' => 'أضف المزيد',
+    'parcel_myself' => 'أنا',
+    'parcel_from_contacts' => 'من جهات الاتصال',
+    'parcel_myself_empty' => 'لا يحتوي ملفك الشخصي على اسم أو رقم هاتف بعد.',
+    'parcel_contact_no_phone' => 'لا يوجد رقم هاتف لجهة الاتصال هذه.',
 ];

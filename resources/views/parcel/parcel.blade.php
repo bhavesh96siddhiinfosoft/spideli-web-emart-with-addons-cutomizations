@@ -55,6 +55,10 @@
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
                                     <h3><span>2</span>{{trans('lang.sender_info')}}</h3>
+                                    <div class="p78-fill" data-party="sender">
+                                        <button type="button" class="p78-fill-btn p78-myself">{{ trans('lang.parcel_myself') }}</button>
+                                        <button type="button" class="p78-fill-btn p78-contacts" style="display:none">{{ trans('lang.parcel_from_contacts') }}</button>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -99,6 +103,10 @@
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
                                     <h3><span>3</span> {{trans('lang.receiver_info')}}</h3>
+                                    <div class="p78-fill" data-party="receiver">
+                                        <button type="button" class="p78-fill-btn p78-myself">{{ trans('lang.parcel_myself') }}</button>
+                                        <button type="button" class="p78-fill-btn p78-contacts" style="display:none">{{ trans('lang.parcel_from_contacts') }}</button>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -157,6 +165,10 @@
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
                                     <h3><span>2</span>{{trans('lang.sender_info')}}</h3>
+                                    <div class="p78-fill" data-party="sender">
+                                        <button type="button" class="p78-fill-btn p78-myself">{{ trans('lang.parcel_myself') }}</button>
+                                        <button type="button" class="p78-fill-btn p78-contacts" style="display:none">{{ trans('lang.parcel_from_contacts') }}</button>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -206,6 +218,10 @@
                             <div class="tab-inner">
                                 <div class="tab-title sende-title">
                                     <h3><span>3</span> {{trans('lang.receiver_info')}} </h3>
+                                    <div class="p78-fill" data-party="receiver">
+                                        <button type="button" class="p78-fill-btn p78-myself">{{ trans('lang.parcel_myself') }}</button>
+                                        <button type="button" class="p78-fill-btn p78-contacts" style="display:none">{{ trans('lang.parcel_from_contacts') }}</button>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="inputField col-md-6">
@@ -1004,6 +1020,110 @@
         console.error("Error fetching global settings: ", error);
     });
     // --- END OF DEFAULT COUNTRY LOGIC ---
+
+    /* Point 78: fill the sender or the receiver with one tap.
+     *   "Myself"        the signed-in customer's own name and phone
+     *                   (users/{uid}: firstName, lastName, countryCode,
+     *                   phoneNumber).
+     *   "From contacts" the phone's contact list, through the browser's
+     *                   Contact Picker. Only Chrome on Android has it, so the
+     *                   button is shown only where it exists; elsewhere the
+     *                   fields are typed as before.
+     * Each button fills its own tab's fields. Address is not touched. */
+    function p78Fields(btn) {
+        var party = $(btn).closest('.p78-fill').data('party');
+        var $tab = $(btn).closest('.tab-pane');
+        return {
+            name: $tab.find(party === 'sender' ? '.senderName' : '.receiverName'),
+            country: $tab.find(party === 'sender' ? '#senderPhoneCountry' : '#receiverPhoneCountry'),
+            phone: $tab.find(party === 'sender' ? '.senderPhone' : '.receiverPhone')
+        };
+    }
+
+    /* "+237 6 99 00 11 22", "00237699001122" or "699001122" -> the country
+     * code the phone selector knows (longest match) and the national digits. */
+    function p78SplitPhone(raw, $country) {
+        var tel = String(raw || '').replace(/[^\d+]/g, '');
+        if (tel.indexOf('00') === 0) {
+            tel = '+' + tel.substring(2);
+        }
+        if (tel.charAt(0) !== '+') {
+            return { code: '', national: tel.replace(/\D/g, '') };
+        }
+        var digits = tel.substring(1);
+        for (var len = 4; len >= 1; len--) {
+            var code = digits.substring(0, len);
+            if ($country.find('option').filter(function () { return $(this).val() === code; }).length) {
+                return { code: code, national: digits.substring(len) };
+            }
+        }
+        return { code: '', national: digits };
+    }
+
+    function p78Fill(f, name, code, national) {
+        f.name.val(name).trigger('input');
+        if (code) {
+            f.country.val(code).trigger('change');
+        }
+        f.phone.val(national).trigger('input');
+    }
+
+    $(document).on('click', '.p78-myself', async function () {
+        var f = p78Fields(this);
+        if (typeof user_uuid === 'undefined' || !user_uuid) {
+            return;
+        }
+        try {
+            var snap = await database.collection('users').doc(user_uuid).get();
+            var me = snap.exists ? (snap.data() || {}) : {};
+            var name = [me.firstName, me.lastName].filter(function (v) { return v && String(v).trim(); }).join(' ').trim();
+            var code = String(me.countryCode || '').replace(/\D/g, '');
+            var phone = String(me.phoneNumber || '').replace(/[^\d+]/g, '');
+            if (phone.charAt(0) === '+') {
+                /* Phone sign-ups store "+237699..."; e-mail sign-ups the national digits. */
+                if (code && phone.indexOf('+' + code) === 0) {
+                    phone = phone.substring(code.length + 1);
+                } else {
+                    var split = p78SplitPhone(phone, f.country);
+                    code = split.code || code;
+                    phone = split.national;
+                }
+            }
+            if (!name && !phone) {
+                alert("{{ trans('lang.parcel_myself_empty') }}");
+                return;
+            }
+            p78Fill(f, name, code, phone);
+        } catch (e) {
+            console.error('Point 78: reading the profile failed', e);
+        }
+    });
+
+    $(document).on('click', '.p78-contacts', async function () {
+        var f = p78Fields(this);
+        try {
+            var picked = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+            if (!picked || !picked.length) {
+                return;   // the customer closed the picker
+            }
+            var c = picked[0];
+            var tel = (c.tel || []).filter(function (t) { return t && String(t).trim(); })[0] || '';
+            if (!tel) {
+                alert("{{ trans('lang.parcel_contact_no_phone') }}");
+                return;
+            }
+            var split = p78SplitPhone(tel, f.country);
+            p78Fill(f, ((c.name || [])[0] || '').trim(), split.code, split.national);
+        } catch (e) {
+            console.error('Point 78: the contact picker failed', e);
+        }
+    });
+
+    $(function () {
+        if ('contacts' in navigator && navigator.contacts && typeof navigator.contacts.select === 'function') {
+            $('.p78-contacts').show();
+        }
+    });
 
     $(document).ready(function(){
         let now = new Date();

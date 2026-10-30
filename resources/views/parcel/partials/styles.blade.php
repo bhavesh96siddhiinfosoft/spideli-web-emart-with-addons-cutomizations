@@ -17,6 +17,14 @@
     .p41-choice input:focus-visible + span { outline: 2px solid #D17E19; outline-offset: 2px; }
     .p41-point-select { border-radius: 10px; }
 
+    /* Point 78: "Myself" / "From contacts" beside Sender and Receiver */
+    .p78-fill { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+    .p78-fill-btn {
+        padding: 6px 16px; border: 1px solid #D17E19; border-radius: 20px; background: #fff;
+        color: #D17E19; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .p78-fill-btn:hover, .p78-fill-btn:focus { background: #D17E19; color: #fff; outline: none; }
+
     /* Checkout: the carrier list */
     .p41-carriers .p41-carrier {
         display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 10px;

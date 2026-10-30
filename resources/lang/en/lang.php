@@ -1157,4 +1157,8 @@ return [
     'checkout_need_anything_else' => 'Need anything else?',
     'checkout_add_more_items' => 'Add more items, if you want.',
     'checkout_add_more' => 'Add more',
+    'parcel_myself' => 'Myself',
+    'parcel_from_contacts' => 'From contacts',
+    'parcel_myself_empty' => 'Your profile has no name or phone number yet.',
+    'parcel_contact_no_phone' => 'This contact has no phone number.',
 ];
