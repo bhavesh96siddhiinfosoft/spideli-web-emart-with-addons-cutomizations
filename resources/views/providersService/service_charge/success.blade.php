@@ -128,9 +128,11 @@
                     couponCode: couponCode,
                     discount: discount,
                     discountLabel: discountLabel,
-                    discountType: discountType,
-                    extraPaymentStatus: true
-                }).then(function (result) {
+                    discountType: discountType
+                }).then(function () {
+                    /* Point 81: only the charges that were in this amount become paid. */
+                    return markExtraChargesPaid(id_order, {!! json_encode(@$cart['charged'] ?: [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) !!});
+                }).then(function () {
                     window.location.href = "{{route('my-bookings')}}";
                 });
             });

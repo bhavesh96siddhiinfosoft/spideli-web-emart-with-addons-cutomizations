@@ -66,25 +66,17 @@
             finalCheckout();
         })
 
+        /* Point 81: mark paid exactly the charges in the amount charged (a charge
+           added meanwhile stays pending). No provider row: the provider is
+           credited the charges with the booking when it completes
+           (EXTRA-CHARGES-SPEC 5). Then event 14c to the provider and worker. */
+        var extraChargesCharged = {!! json_encode(@$cart['cart_order']['charged'] ?: [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) !!};
         async function finalCheckout() {
-            var wId = database.collection('tmp').doc().id;
-            await database.collection('wallet').doc(wId).set({
-                "amount": parseFloat(extraCharge),
-                "date": firebase.firestore.FieldValue.serverTimestamp(),
-                "id": wId,
-                "isTopUp": true,
-                "order_id": id_order,
-                "payment_method": 'Wallet',
-                "payment_status": "success",
-                "serviceType": "ondemand-service",
-                "user_id": providerId,
-                'transactionUser': 'provider',
-                'note': 'Extra Charge Amount Credited'
-            }).then(async function (result) {
-                await database.collection('provider_orders').doc(id_order).update({extraPaymentStatus: true}).then(function (result) {
-                    window.location.href = "{{route('my-bookings')}}";
-                });
-            })
+            markExtraChargesPaid(id_order, extraChargesCharged).then(function () {
+                return sendExtraChargesPaidNotification(id_order);
+            }).then(function () {
+                window.location.href = "{{route('my-bookings')}}";
+            });
         }
         <?php } else { ?>
             $('.payment-status').html('{{ trans("lang.payment_failed") }}');

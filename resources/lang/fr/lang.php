@@ -1165,4 +1165,10 @@ return [
     'addtocart_total' => 'Total',
     'addons_unavailable' => 'The add-ons could not be priced. Please try again.',
     'cart_addons' => 'Addons',
+    'extra_charge_default' => 'Frais supplémentaire',
+    'extra_charge_paid' => 'Payé',
+    'extra_charge_pending' => 'En attente',
+    'extra_charges_total' => 'Total des frais supplémentaires',
+    'extra_charges_to_pay' => 'Reste à payer',
+    'extra_charges_nothing_to_pay' => 'Il ne reste rien à payer pour cette réservation.',
 ];

@@ -226,10 +226,8 @@
                                     </div>
                                 </div>
                                 <div class="p-3 extra_charge_div" style="display:none">
-                                    <div class="d-flex align-items-center mb-2">
-                                        <h6 class="font-weight-bold mb-1">{{ trans('lang.extra_charges') }}</h6>
-                                        <h6 class="font-weight-bold ml-auto mb-1" id="extra_charges"></h6>
-                                    </div>
+                                    <h6 class="font-weight-bold mb-2">{{ trans('lang.extra_charges') }}</h6>
+                                    <div id="extra_charges"></div>
                                 </div>
                             </div>
                         </div>
@@ -503,22 +501,18 @@
                 booking_subtotal_val = products_price;
                 order_discount_val = "";
                 
-                var extraCharge_val = 0;
-                var extraCharge = 0;
-                if (orderDetails.extraCharges != "" && orderDetails.extraCharges != null) {
+                /* Point 81: every charge as its own row, and the total. */
+                if (extraChargesTotal(orderDetails) > 0) {
                     $('.extra_charge_div').show();
-                    extraCharge = parseFloat(orderDetails.extraCharges);
+                    $('#extra_charges').html(extraChargesHtml(orderDetails, function (a) { return formatCurrency(a, currencyData); }, extraChargeLabels));
                 }
                 if (currencyAtRight) {
                     order_total_val = order_total.toFixed(decimal_degits) + "" + currentCurrency;
                     order_discount_val = parseFloat(order_discount).toFixed(decimal_degits) + "" + currentCurrency;
-                    extraCharge_val = parseFloat(extraCharge).toFixed(decimal_degits) + "" + currentCurrency;
                 } else {
                     order_total_val = currentCurrency + "" + order_total.toFixed(decimal_degits);
                     order_discount_val = currentCurrency + "" + parseFloat(order_discount).toFixed(decimal_degits);
-                    extraCharge_val = currentCurrency + "" + parseFloat(extraCharge).toFixed(decimal_degits);
                 }
-                $('#extra_charges').html(extraCharge_val);
                 $("#booking-id").html(order_number);
                 $("#booking-status").html('<span class="py-2 px-3 order_completed">' + order_status + '<span>');
                 $('#service-name').html(orderDetails.provider.title);

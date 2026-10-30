@@ -608,6 +608,12 @@ class PayExtraChargeController extends Controller
     public function orderProccessing(Request $request)
     {
         $ondemand_cart_order = $request->all();
+        /* Point 81: the amount and the booking come from the server's own read
+           (set-extra-charge), whatever the page posts. */
+        $extra_charge_cart = Session::get('extra_charge_cart', []);
+        $ondemand_cart_order['total_pay'] = $extra_charge_cart['extra_charge'] ?? 0;
+        $ondemand_cart_order['orderId'] = $extra_charge_cart['order_id'] ?? '';
+        $ondemand_cart_order['charged'] = $extra_charge_cart['charged'] ?? [];
         $ondemand_cart = Session::get('ondemand_cart', []);
         $ondemand_cart['cart_order'] = $ondemand_cart_order;
         Session::put('ondemand_cart', $ondemand_cart);

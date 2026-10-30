@@ -1042,9 +1042,11 @@
             'couponCode': couponCode,
             'discount': discount,
             'discountLabel': discountLabel,
-            'discountType': discountType,
-            'extraPaymentStatus': true
-        }).then(function (result) {
+            'discountType': discountType
+        }).then(function () {
+            /* Point 81: only the charges that were in this amount become paid. */
+            return markExtraChargesPaid(orderId, JSON.parse($('#extraChargesCharged').val() || '[]'));
+        }).then(function () {
             window.location.href = "{{route('my-bookings')}}";
         })
     }

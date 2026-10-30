@@ -980,4 +980,10 @@ return [
     'addtocart_total' => 'الإجمالي',
     'addons_unavailable' => 'تعذّر تسعير الإضافات. حاول مرة أخرى.',
     'cart_addons' => 'الإضافات',
+    'extra_charge_default' => 'رسوم إضافية',
+    'extra_charge_paid' => 'مدفوعة',
+    'extra_charge_pending' => 'قيد الانتظار',
+    'extra_charges_total' => 'إجمالي الرسوم الإضافية',
+    'extra_charges_to_pay' => 'المتبقي للدفع',
+    'extra_charges_nothing_to_pay' => 'لا يوجد مبلغ متبقٍ للدفع على هذا الحجز.',
 ];

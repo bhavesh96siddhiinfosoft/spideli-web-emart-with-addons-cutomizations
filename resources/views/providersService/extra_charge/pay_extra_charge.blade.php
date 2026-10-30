@@ -408,6 +408,7 @@
     }
     var extraCharge = $('#extraCharge').val();
     var orderId = $('#extraChargeId').val();
+    var extraChargesCharged = JSON.parse($('#extraChargesCharged').val() || '[]');   // point 81: the charges in this amount
     var providerId = '';
     database.collection('provider_orders').where('id', '==', orderId).get().then(async function(snapshots) {
         orderDetail = snapshots.docs[0].data();
@@ -732,60 +733,66 @@
             });
         } else {
             if (payment_method == "wallet") {
-                if (wallet_amount < extraCharge) {
+                if (parseFloat(wallet_amount) < parseFloat(extraCharge)) {
                     alert("{{ trans('lang.dont_have_sufficient_balance') }}");
                     return false;
                 }
-                var wId = database.collection('tmp').doc().id;
-                database.collection('wallet').doc(wId).set({
-                    "amount": extraCharge,
-                    "date": firebase.firestore.FieldValue.serverTimestamp(),
-                    "id": wId,
-                    "isTopUp": false,
-                    "order_id": orderId,
-                    "payment_method": 'Wallet',
-                    "payment_status": "success",
-                    "serviceType": "ondemand-service",
-                    "user_id": userId,
-                    'transactionUser': 'customer',
-                    'note': 'Extra Booking Payment'
-                }).then(async function(result) {
-                    var wId = database.collection('tmp').doc().id;
-                    await database.collection('wallet').doc(wId).set({
-                        "amount": parseFloat(extraCharge),
-                        "date": firebase.firestore.FieldValue.serverTimestamp(),
-                        "id": wId,
-                        "isTopUp": true,
-                        "order_id": orderId,
-                        "payment_method": 'Wallet',
-                        "payment_status": "success",
-                        "serviceType": "ondemand-service",
-                        "user_id": providerId,
-                        'transactionUser': 'provider',
-                        'note': 'Extra Charge Amount Credited'
-                    }).then(async function(result) {
-                        wallet_amount = parseFloat(wallet_amount) - parseFloat(extraCharge);
-                        await database.collection('users').doc(userId).update({
-                            'wallet_amount': wallet_amount
-                        }).then(async function(result) {
-                            updatePaymentStatus();
-                        })
-                    })
-                })
+                /* Point 81: the debit, its wallet row and the charges marked paid
+                   in ONE transaction - if any part fails, nothing is taken and
+                   nothing is marked paid. The provider is credited the charges
+                   with the booking when it completes (EXTRA-CHARGES-SPEC 5), so
+                   no provider row here. */
+                var userRef = database.collection('users').doc(userId);
+                markExtraChargesPaid(orderId, extraChargesCharged, {
+                    read: function (tx) {
+                        return tx.get(userRef);
+                    },
+                    write: function (tx, userSnap, amount) {
+                        var balance = parseFloat(userSnap.data().wallet_amount) || 0;
+                        if (amount <= 0) {
+                            throw new Error("{{ trans('lang.extra_charges_nothing_to_pay') }}");
+                        }
+                        if (balance < amount) {
+                            throw new Error("{{ trans('lang.dont_have_sufficient_balance') }}");
+                        }
+                        var wId = database.collection('tmp').doc().id;
+                        tx.set(database.collection('wallet').doc(wId), {
+                            "amount": amount,
+                            "date": firebase.firestore.FieldValue.serverTimestamp(),
+                            "id": wId,
+                            "isTopUp": false,
+                            "order_id": orderId,
+                            "payment_method": 'Wallet',
+                            "payment_status": "success",
+                            "serviceType": "ondemand-service",
+                            "user_id": userId,
+                            'transactionUser': 'customer',
+                            'note': 'Booking Extra charge debited'
+                        });
+                        tx.update(userRef, { 'wallet_amount': balance - amount });
+                    }
+                }).then(function () {
+                    afterExtraChargesPaid();
+                }).catch(function (error) {
+                    alert(error.message || String(error));
+                });
             } else {
                 updatePaymentStatus();
             }
         }
     }
     async function updatePaymentStatus() {
-        database.collection('provider_orders').where('id', '==', orderId).get().then(async function(snapshots) {
-            if (snapshots.docs.length > 0) {
-                database.collection('provider_orders').doc(orderId).update({
-                    'extraPaymentStatus': true
-                }).then(function(result) {
-                    window.location.href = "{{ route('my-bookings') }}";
-                })
-            }
-        })
+        markExtraChargesPaid(orderId, extraChargesCharged).then(function () {
+            afterExtraChargesPaid();
+        }).catch(function (error) {
+            alert(error.message || String(error));
+        });
+    }
+    /* Event 14c: tell the provider, and the worker if one is assigned, that the
+       charges are paid - as the customer app does. */
+    function afterExtraChargesPaid() {
+        sendExtraChargesPaidNotification(orderId).then(function () {
+            window.location.href = "{{ route('my-bookings') }}";
+        });
     }
 </script>

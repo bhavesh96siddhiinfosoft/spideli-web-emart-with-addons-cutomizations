@@ -236,14 +236,8 @@
                                         </div>
                                     </div>
                                     <div class="p-3 extra_charge_div" style="display:none">
-                                        <div class="d-flex align-items-center mb-2">
-                                            <h6 class="font-weight-bold mb-1">{{ trans('lang.extra_charges') }}</h6>
-                                            <h6 class="font-weight-bold ml-auto mb-1" id="extra_charges"></h6>
-                                        </div>
-                                        <div class="d-flex align-items-center mb-2 mt-3 extra_charges_desc_div d-none">
-                                            <h6 class="font-weight-bold mb-1">{{ trans('lang.extra_charges_desc') }}</h6>
-                                            <h6 class="font-weight-bold ml-auto mb-1" id="extra_charges_desc"></h6>
-                                        </div>
+                                        <h6 class="font-weight-bold mb-2">{{ trans('lang.extra_charges') }}</h6>
+                                        <div id="extra_charges"></div>
                                     </div>
                                 </div>
                             </div>
@@ -486,37 +480,31 @@
                 booking_subtotal_val = products_price;
                 order_discount_val = "";
 
-                var extraCharge_val = 0;
-                var extraCharge = 0;
-                if (orderDetails.extraCharges != "" && orderDetails.extraCharges != null) {
-                    if (orderDetails.extraPaymentStatus == false) {
+                /* Point 81: every charge as its own row (Paid / Pending), the total,
+                   and Pay Extra Charge for what is still unpaid only. */
+                var unpaidExtraCharge = unpaidExtraChargesTotal(orderDetails);
+                if (extraChargesTotal(orderDetails) > 0) {
+                    if (orderDetails.status == 'Order Ongoing' && unpaidExtraCharge > 0) {
                         if ((orderDetails.provider.priceUnit == 'Hourly' && orderDetails.paymentStatus == true) || orderDetails.provider.priceUnit != 'Hourly') {
                             $('.pay_extra_charge_btn_div').show();
-                            $('#pay_extra_charge_btn').attr('data-extra', parseFloat(orderDetails.extraCharges));
+                            $('#pay_extra_charge_btn').attr('data-extra', unpaidExtraCharge);
                         }
                     }
                     $('.extra_charge_div').show();
-                    extraCharge = parseFloat(orderDetails.extraCharges);
-                    if (orderDetails.hasOwnProperty('extraChargesDescription') && orderDetails.extraChargesDescription != null && orderDetails.extraChargesDescription != '') {
-                        $('#extra_charges_desc').html(orderDetails.extraChargesDescription)
-                        $('.extra_charges_desc_div').removeClass('d-none');
-                    }
+                    $('#extra_charges').html(extraChargesHtml(orderDetails, function (a) { return formatCurrency(a, currencyData); }, extraChargeLabels));
                 }
                 if (orderDetails.provider.priceUnit == 'Hourly' && orderDetails.paymentStatus == false && orderDetails.endTime != null && orderDetails.endTime != '') {
                     $('.pay_btn_div').show();
                     $('#pay_btn').attr('data-total', parseFloat(order_total));
-                    $('#pay_btn').attr('data-extra', parseFloat(extraCharge));
+                    $('#pay_btn').attr('data-extra', unpaidExtraCharge);
                 }
                 if (currencyAtRight) {
                     order_total_val = order_total.toFixed(decimal_degits) + "" + currentCurrency;
                     order_discount_val = parseFloat(order_discount).toFixed(decimal_degits) + "" + currentCurrency;
-                    extraCharge_val = parseFloat(extraCharge).toFixed(decimal_degits) + "" + currentCurrency;
                 } else {
                     order_total_val = currentCurrency + "" + order_total.toFixed(decimal_degits);
                     order_discount_val = currentCurrency + "" + parseFloat(order_discount).toFixed(decimal_degits);
-                    extraCharge_val = currentCurrency + "" + parseFloat(extraCharge).toFixed(decimal_degits);
                 }
-                $('#extra_charges').html(extraCharge_val);
                 $("#booking-id").html(order_number);
                 $("#booking-status").html('<span class="py-2 px-3 order_ongoing">' + order_status + '<span>');
                 $('#service-name').html(orderDetails.provider.title);
@@ -665,6 +653,11 @@
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             },
             success: function(response) {
+                if (response && response.success === false) {
+                    alert(response.message);
+                    window.location.reload();
+                    return;
+                }
                 window.location.href = '{{ route('pay-extra-charge') }}';
             }
         });
@@ -692,6 +685,10 @@
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             },
             success: function(response) {
+                if (response && response.success === false) {
+                    alert(response.message);
+                    return;
+                }
                 window.location.href = '{{ route('pay-service-charge') }}';
             }
         });

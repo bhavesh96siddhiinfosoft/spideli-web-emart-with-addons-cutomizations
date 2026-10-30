@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\VendorUsers;
+use App\Support\ExtraCharges;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Razorpay\Api\Api;
@@ -75,11 +76,19 @@ class OnDemandController extends Controller
 
     public function setExtraCharge(Request $request)
     {
-        $extra_charge = $request->get('extraCharge');
+        /* Point 81: what is still unpaid, read from the booking itself - never
+           the amount the page sends - and which charges that is, so exactly
+           those are marked paid afterwards. */
         $order_id = $request->get('orderId');
+        $user = Auth::check() ? VendorUsers::where('email', Auth::user()->email)->first() : null;
+        $owed = $user ? ExtraCharges::owedOn($order_id, $user->uuid) : null;
+        if (!$owed || ($owed['booking']['status'] ?? '') !== 'Order Ongoing' || $owed['amount'] <= 0) {
+            return response()->json(['success' => false, 'message' => trans('lang.extra_charges_nothing_to_pay')]);
+        }
         $extra_charge_cart = Session::get('extra_charge_cart', []);
-        $extra_charge_cart['extra_charge'] = $extra_charge;
+        $extra_charge_cart['extra_charge'] = $owed['amount'];
         $extra_charge_cart['order_id'] = $order_id;
+        $extra_charge_cart['charged'] = $owed['charged'];
         Session::put('extra_charge_cart', $extra_charge_cart);
         Session::save();
         return response()->json(['success' => true]);

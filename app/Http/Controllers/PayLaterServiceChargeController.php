@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\VendorUsers;
+use App\Support\ExtraCharges;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Razorpay\Api\Api;
@@ -31,8 +32,15 @@ class PayLaterServiceChargeController extends Controller
 
     public function setServiceCharge(Request $request)
     {
-        $extra_charge = $request->get('extraCharge');
         $order_id = $request->get('orderId');
+        /* Point 81: the extra charges added to Pay Now are what is still unpaid,
+           read from the booking itself, not the amount the page sends. */
+        $user = VendorUsers::where('email', Auth::user()->email)->first();
+        $owed = $user ? ExtraCharges::owedOn($order_id, $user->uuid) : null;
+        if (!$owed) {
+            return response()->json(['success' => false, 'message' => trans('lang.extra_charges_nothing_to_pay')]);
+        }
+        $extra_charge = $owed['amount'];
         $service_total = @$request->get('serviceTotal');
         $decimal_degits = $request->get('decimal_degits');
         $taxSetting = $request->get('taxSetting');
@@ -45,6 +53,7 @@ class PayLaterServiceChargeController extends Controller
         $service_charge_cart = [];
         $service_charge_cart['extra_charge'] = $extra_charge;
         $service_charge_cart['order_id'] = $order_id;
+        $service_charge_cart['charged'] = $owed['charged'];
         $service_charge_cart['service_total'] = $service_total;
         $service_charge_cart['decimal_degits'] = $decimal_degits;
         $service_charge_cart['taxSetting'] = $taxSetting;

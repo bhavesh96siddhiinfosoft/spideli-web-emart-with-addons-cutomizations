@@ -13,6 +13,7 @@
         @php $digit_decimal = $service_charge_cart['decimal_degits']; @endphp
     @endif
     <input type="hidden" id="extraCharge" value="{{@$service_charge_cart['extra_charge']}}">
+    <input type="hidden" id="extraChargesCharged" value="{{ json_encode(@$service_charge_cart['charged'] ?: []) }}">
     <input type="hidden" id="orderId" value="{{@$service_charge_cart['order_id']}}">
     <input type="hidden" id="serviceTotal" value="{{@$service_charge_cart['service_total']}}">
     <input type="hidden" id="provider_id" value="{{@$service_charge_cart['provider_id']}}">

@@ -9,6 +9,7 @@
 
     <input type="hidden" id="extraCharge" value="{{@$extra_charge_cart['extra_charge']}}">
     <input type="hidden" id="extraChargeId" value="{{@$extra_charge_cart['order_id']}}">
+    <input type="hidden" id="extraChargesCharged" value="{{ json_encode(@$extra_charge_cart['charged'] ?: []) }}">
     <div class="bg-white p-3 clearfix btm-total">
         <h6 class="font-weight-bold mb-0">{{trans('lang.total')}}
             <p class="float-right">

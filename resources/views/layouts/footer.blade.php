@@ -1777,8 +1777,12 @@
         var order_total = order_subtotal + platformFee + total_tax_amount;
 
         var extraChargesHtml = '';
-        if (orderDetails.extraCharges != "" && orderDetails.extraCharges != null) {
-            extraChargesHtml += `<strong>{{ trans('lang.extra_charges') }} : ${formatCurrency(parseFloat(orderDetails.extraCharges), currencyData)}</strong><br>`;
+        /* Point 81: each charge, then the total. */
+        extraChargesOf(orderDetails).forEach(function (c) {
+            extraChargesHtml += `${extraChargeEscape(c.description || extraChargeLabels.charge)} : ${formatCurrency(c.amount, currencyData)} (${c.paid ? extraChargeLabels.paid : extraChargeLabels.pending})<br>`;
+        });
+        if (extraChargesTotal(orderDetails) > 0) {
+            extraChargesHtml += `<strong>{{ trans('lang.extra_charges') }} : ${formatCurrency(extraChargesTotal(orderDetails), currencyData)}</strong><br>`;
         }
 
         var discountText = formatCurrency(total_discount, currencyData);
@@ -2901,20 +2905,20 @@
                             $("#order_notification_url").attr("href", routeondemand.replace(':id', val.id));
                             $("#order_notification_modal").trigger("click");
                         }
-                    } else if (val.status == "Order Ongoing" && val.extraCharges == "" && val.endTime == null) {
+                    } else if (val.status == "Order Ongoing" && extraChargesTotal(val) == 0 && val.endTime == null) {
                         if (section_id == val.sectionId) {
                             $('.order_notification_title').text(bookingInTransitSubject);
                             $('.order_notification_message').html(bookingInTransitdMsg);
                             $("#order_notification_url").attr("href", routeondemand.replace(':id', val.id));
                             $("#order_notification_modal").trigger("click");
                         }
-                    } else if (val.status == 'Order Ongoing' && val.extraCharges != "" && val.extraCharges != null && sessionStorage.getItem('extra_charge_notiifcation_' + val.id) == null) {
+                    } else if (val.status == 'Order Ongoing' && unpaidExtraChargesTotal(val) > 0 && sessionStorage.getItem('extra_charge_notiifcation_' + val.id + '_' + extraChargesOf(val).length) == null) {
                         if (section_id == val.sectionId) {
                             $('.order_notification_title').text(bookingAddExtraChargeSub);
                             $('.order_notification_message').html(bookingAddExtraChargeMsg);
                             $("#order_notification_url").attr("href", routeondemand.replace(':id', val.id));
                             $("#order_notification_modal").trigger("click");
-                            sessionStorage.setItem('extra_charge_notiifcation_' + val.id, true);
+                            sessionStorage.setItem('extra_charge_notiifcation_' + val.id + '_' + extraChargesOf(val).length, true);   // point 81: again for each new charge
                         }
                     } else if (val.status == "Order Ongoing" && val.endTime != null && sessionStorage.getItem('stop_time_notiifcation_' + val.id) == null) {
                         if (section_id == val.sectionId) {
@@ -5386,6 +5390,244 @@
                 }
             });
         });
+
+        /* ---- Several extra charges per booking (client point 81) --------
+         *
+         * The worker or the provider adds as many charges as the job needs;
+         * each is paid or pending on its own. Contract: EXTRA-CHARGES-SPEC.md
+         * (30 Oct 2026). Byte-identical in the website footer and the admin
+         * and provider layouts, so a booking reads the same everywhere.
+         *
+         *   provider_orders.extraChargesList  [{amount, description, addedAt, paid}]
+         *
+         * THE RULE: the list when there is one (even []), else the older single
+         * charge (extraCharges + extraChargesDescription, paid when
+         * extraPaymentStatus is true), else none. extraCharges is never cleared,
+         * so it may still hold a value next to a list - never add it then.
+         * ------------------------------------------------------------------ */
+        function extraChargeAmount(v) {
+            var n = typeof v === 'number' ? v : Number(String(v == null ? '' : v).trim().replace(',', '.'));
+            return isFinite(n) ? n : 0;
+        }
+
+        function extraChargesOf(booking) {
+            if (!booking) {
+                return [];
+            }
+            if (Array.isArray(booking.extraChargesList)) {
+                return booking.extraChargesList
+                    .filter(function (c) { return c && typeof c === 'object'; })
+                    .map(function (c) {
+                        return {
+                            amount: extraChargeAmount(c.amount),
+                            description: String(c.description == null ? '' : c.description).trim(),
+                            addedAt: c.addedAt == null ? null : c.addedAt,
+                            paid: c.paid === true
+                        };
+                    })
+                    .filter(function (c) { return c.amount > 0; });
+            }
+            var amount = extraChargeAmount(booking.extraCharges);
+            if (amount <= 0) {
+                return [];
+            }
+            return [{
+                amount: amount,
+                description: String(booking.extraChargesDescription == null ? '' : booking.extraChargesDescription).trim(),
+                addedAt: null,
+                paid: booking.extraPaymentStatus === true
+            }];
+        }
+
+        function extraChargesTotal(booking) {
+            return extraChargesOf(booking).reduce(function (t, c) { return t + c.amount; }, 0);
+        }
+
+        function unpaidExtraChargesTotal(booking) {
+            return extraChargesOf(booking).filter(function (c) { return !c.paid; }).reduce(function (t, c) { return t + c.amount; }, 0);
+        }
+
+        /* A Firestore Timestamp, {seconds, nanoseconds}, or an ISO string (as the
+         * website's server reads it) - in milliseconds, or null. */
+        function extraChargeMillis(addedAt) {
+            if (addedAt == null || addedAt === '') {
+                return null;
+            }
+            if (typeof addedAt.toMillis === 'function') {
+                return addedAt.toMillis();
+            }
+            if (addedAt.seconds !== undefined) {
+                return addedAt.seconds * 1000 + Math.floor((addedAt.nanoseconds || 0) / 1e6);
+            }
+            var t = Date.parse(addedAt);
+            return isNaN(t) ? null : t;
+        }
+
+        /* Which charge is which, to mark exactly the ones that were charged. */
+        function extraChargeKey(c) {
+            var ms = extraChargeMillis(c.addedAt);
+            return (ms === null ? 'older' : ms) + '|' + extraChargeAmount(c.amount) + '|' + String(c.description == null ? '' : c.description).trim();
+        }
+
+        function extraChargeEscape(text) {
+            return String(text).replace(/[&<>"']/g, function (ch) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+            });
+        }
+
+        /* One row per charge (oldest first), then the total and what is still to
+         * pay. `money` formats an amount in the booking's currency; `labels`
+         * carries the translated words. '' when there is no charge. */
+        function extraChargesHtml(booking, money, labels) {
+            var charges = extraChargesOf(booking);
+            if (!charges.length) {
+                return '';
+            }
+            labels = labels || {};
+            var html = '<div class="extra-charges-list">';
+            charges.forEach(function (c) {
+                var when = '';
+                var ms = extraChargeMillis(c.addedAt);
+                if (labels.showTime && ms !== null) {
+                    when = '<small class="d-block text-muted">' + extraChargeEscape(new Date(ms).toLocaleString()) + '</small>';
+                }
+                html += '<div class="extra-charge-row d-flex align-items-start mb-1">'
+                    + '<span class="mr-2">' + extraChargeEscape(c.description || labels.charge || 'Extra charge') + when + '</span>'
+                    + '<span class="ml-auto text-nowrap">' + money(c.amount)
+                    + ' <span class="badge ' + (c.paid ? 'badge-success' : 'badge-warning') + '">'
+                    + extraChargeEscape(c.paid ? (labels.paid || 'Paid') : (labels.pending || 'Pending')) + '</span></span></div>';
+            });
+            html += '<div class="extra-charge-row d-flex font-weight-bold border-top pt-1"><span>' + extraChargeEscape(labels.total || 'Total extra charges')
+                + '</span><span class="ml-auto">' + money(extraChargesTotal(booking)) + '</span></div>';
+            var unpaid = unpaidExtraChargesTotal(booking);
+            if (unpaid > 0) {
+                html += '<div class="extra-charge-row d-flex"><span>' + extraChargeEscape(labels.toPay || 'Still to pay')
+                    + '</span><span class="ml-auto">' + money(unpaid) + '</span></div>';
+            }
+            return html + '</div>';
+        }
+
+        /* "Second bathroom: 2,000 (Pending); Extra cleaning products: 1,500 (Paid)" */
+        function extraChargesText(booking, money, labels) {
+            labels = labels || {};
+            return extraChargesOf(booking).map(function (c) {
+                return (c.description || labels.charge || 'Extra charge') + ': ' + money(c.amount)
+                    + ' (' + (c.paid ? (labels.paid || 'Paid') : (labels.pending || 'Pending')) + ')';
+            }).join('; ');
+        }
+
+        /* Adds a charge (spec section 4): in one transaction, an older booking's
+         * single charge becomes the list's first entry, the new one is appended
+         * unpaid, and nothing but extraChargesList / extraPaymentStatus is
+         * written. A Timestamp, not serverTimestamp(), because it is in an array. */
+        function addExtraCharge(bookingId, amount, description) {
+            var ref = database.collection('provider_orders').doc(bookingId);
+            return database.runTransaction(function (tx) {
+                return tx.get(ref).then(function (snap) {
+                    if (!snap.exists) {
+                        throw new Error('booking not found');
+                    }
+                    var charges = extraChargesOf(snap.data());
+                    charges.push({
+                        amount: extraChargeAmount(amount),
+                        description: String(description == null ? '' : description).trim(),
+                        addedAt: firebase.firestore.Timestamp.now(),
+                        paid: false
+                    });
+                    tx.update(ref, { extraChargesList: charges, extraPaymentStatus: false });
+                    return charges;
+                });
+            });
+        }
+
+        /* Marks paid ONLY the charges that were in the amount charged (`charged`,
+         * as read when the payment started), in one transaction, so a charge
+         * added meanwhile stays pending. `opts.read(tx)` may read more (the
+         * customer, for a wallet payment) and `opts.write(tx, read, amount)`
+         * write more in the same transaction - all reads happen before any
+         * write. Resolves to the amount marked paid. */
+        function markExtraChargesPaid(bookingId, charged, opts) {
+            opts = opts || {};
+            var ref = database.collection('provider_orders').doc(bookingId);
+            var paidNow = {};
+            (charged || []).forEach(function (c) {
+                if (c && c.paid !== true) {
+                    paidNow[extraChargeKey(c)] = true;
+                }
+            });
+            return database.runTransaction(function (tx) {
+                return tx.get(ref).then(function (snap) {
+                    if (!snap.exists) {
+                        throw new Error('booking not found');
+                    }
+                    return Promise.resolve(opts.read ? opts.read(tx) : null).then(function (extra) {
+                        var amount = 0;
+                        var charges = extraChargesOf(snap.data()).map(function (c) {
+                            if (!c.paid && paidNow[extraChargeKey(c)]) {
+                                amount += c.amount;
+                                return Object.assign({}, c, { paid: true });
+                            }
+                            return c;
+                        });
+                        if (opts.write) {
+                            opts.write(tx, extra, amount);
+                        }
+                        tx.update(ref, {
+                            extraChargesList: charges,
+                            extraPaymentStatus: charges.every(function (c) { return c.paid; })
+                        });
+                        return amount;
+                    });
+                });
+            });
+        }
+
+        /* Point 81, website only: the words for the rows, and event 14c
+         * extra_charges_paid to the provider and the worker, if one is
+         * assigned, once the customer has paid charges. */
+        var extraChargeLabels = {
+            charge: {!! json_encode(trans('lang.extra_charge_default')) !!},
+            paid: {!! json_encode(trans('lang.extra_charge_paid')) !!},
+            pending: {!! json_encode(trans('lang.extra_charge_pending')) !!},
+            total: {!! json_encode(trans('lang.extra_charges_total')) !!},
+            toPay: {!! json_encode(trans('lang.extra_charges_to_pay')) !!},
+            showTime: true
+        };
+
+        function sendExtraChargesPaidNotification(bookingId) {
+            var send = function (fcm, template) {
+                if (!fcm || !template) {
+                    return Promise.resolve();
+                }
+                return Promise.resolve($.ajax({
+                    type: 'POST',
+                    url: "{{ route('sendnotification') }}",
+                    data: { _token: '{{ csrf_token() }}', fcm: fcm, authorName: '', subject: template.subject, message: template.message }
+                })).catch(function () {});
+            };
+            return Promise.all([
+                database.collection('dynamic_notification').where('type', '==', 'extra_charges_paid').get(),
+                database.collection('provider_orders').doc(bookingId).get()
+            ]).then(function (res) {
+                var template = res[0].empty ? null : res[0].docs[0].data();
+                var booking = res[1].exists ? res[1].data() : null;
+                if (!template || !booking) {
+                    return;
+                }
+                var jobs = [];
+                if (booking.provider && booking.provider.author) {
+                    jobs.push(database.collection('users').doc(booking.provider.author).get().then(function (u) {
+                        return send(u.exists ? u.data().fcmToken : '', template);
+                    }));
+                }
+                if (booking.workerId) {
+                    jobs.push(database.collection('providers_workers').doc(booking.workerId).get().then(function (w) {
+                        return send(w.exists ? w.data().fcmToken : '', template);
+                    }));
+                }
+                return Promise.all(jobs);
+            }).catch(function () {});   // a missed notification never blocks the payment
+        }
 
         /* ---- Addresses: never print the word "null" ----------------------
          *
