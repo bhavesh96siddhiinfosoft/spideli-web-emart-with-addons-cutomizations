@@ -204,11 +204,20 @@
         })
 
         bannerref.get().then(async function(banners) {
+            /* Point 82: only the banners of this visitor's region - a banner
+             * with no regions shows in every region (bannerShownInRegion). */
+            var bannerRegionId = '';
+            try {
+                bannerRegionId = (await getActiveRegionId()) || '';
+            } catch (bannerRegionError) {
+                console.error('region could not be worked out', bannerRegionError);
+            }
+            var regionBanners = banners.docs.filter(function (b) { return bannerShownInRegion(b.data(), bannerRegionId); });
             
             let position1_banners = [];
             let position2_banners = [];
             
-            for (const banner of banners.docs) {
+            for (const banner of regionBanners) {
 
                 const bannerData = banner.data();
                 

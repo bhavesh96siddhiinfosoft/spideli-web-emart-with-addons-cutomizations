@@ -4745,6 +4745,18 @@
     }
 
     /* The everyday accessor. '' means unresolved - treat it as "no region". */
+    /* Point 82: a banner is shown in the regions the admin chose for it
+     * (banner_items.regionIds). None chosen = every region, which keeps every
+     * existing banner where it is. A visitor whose region cannot be worked out
+     * sees only the every-region banners - a wrong region is worse than none. */
+    function bannerShownInRegion(banner, regionId) {
+        var ids = (banner && Array.isArray(banner.regionIds)) ? banner.regionIds.filter(Boolean) : [];
+        if (ids.length === 0) {
+            return true;
+        }
+        return !!regionId && ids.indexOf(regionId) !== -1;
+    }
+
     async function getActiveRegionId() {
         var result = await resolveActiveRegion();
         return result.regionId;

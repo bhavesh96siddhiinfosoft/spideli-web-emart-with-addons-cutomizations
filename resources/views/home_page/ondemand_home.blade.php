@@ -139,9 +139,18 @@
             radiusUnit = radiusUnitData.distanceType;
         })
         bannerref.get().then(async function(banners) {
+            /* Point 82: only the banners of this visitor's region - a banner
+             * with no regions shows in every region (bannerShownInRegion). */
+            var bannerRegionId = '';
+            try {
+                bannerRegionId = (await getActiveRegionId()) || '';
+            } catch (bannerRegionError) {
+                console.error('region could not be worked out', bannerRegionError);
+            }
+            var regionBanners = banners.docs.filter(function (b) { return bannerShownInRegion(b.data(), bannerRegionId); });
             var position1_banners = [];
             var position2_banners = [];
-            banners.docs.forEach((banner) => {
+            regionBanners.forEach((banner) => {
                 var bannerData = banner.data();
                 var redirect_type = '';
                 var redirect_id = '';
