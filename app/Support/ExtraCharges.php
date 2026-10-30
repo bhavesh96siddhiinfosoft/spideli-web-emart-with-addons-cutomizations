@@ -24,7 +24,7 @@ class ExtraCharges
         if (is_int($value) || is_float($value)) {
             return is_finite((float) $value) ? (float) $value : 0.0;
         }
-        $value = str_replace(',', '.', trim((string) $value));
+        $value = trim((string) $value);   // as the apps read it: no comma decimal
         return is_numeric($value) ? (float) $value : 0.0;
     }
 
