@@ -12,6 +12,14 @@ class ApiController extends Controller
 {
     public function deleteUserFromDb(Request $request) {
 
+        /* Point 84: an app that sends the user's Firebase ID token gets the whole
+         * delete - the sign-in removed (so the email can sign up again), the
+         * customer profile kept as history (isDeleted), and the rows below.
+         * Without the header the old behaviour stays, until the app sends it. */
+        if ($request->bearerToken()) {
+            return $this->deleteSignedInUser($request);
+        }
+
         $validator = Validator::make($request->all(), [
             'uuid' => 'required|exists:vendor_users,uuid',  
         ]);
@@ -60,5 +68,42 @@ class ApiController extends Controller
                 'message' => 'Failed to delete user. ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /* The signed-in user deletes their own account. The token says who they
+     * are; a uuid in the body, when sent, must be the same user. */
+    private function deleteSignedInUser(Request $request)
+    {
+        $accounts = new \App\Services\FirebaseAccounts();
+        try {
+            $uid = $accounts->verifyIdToken($request->bearerToken());
+        } catch (Exception $e) {
+            return response()->json(['status' => 'error', 'message' => 'The sign-in could not be checked. Try again.'], 503);
+        }
+        if (!$uid) {
+            return response()->json(['status' => 'error', 'message' => 'Sign in again, then delete the account.'], 401);
+        }
+        if ($request->filled('uuid') && (string)$request->input('uuid') !== $uid) {
+            return response()->json(['status' => 'error', 'message' => 'You can only delete your own account.'], 403);
+        }
+
+        try {
+            $accounts->markProfileDeleted($uid);
+            $accounts->deleteSignIn($uid);
+        } catch (Exception $e) {
+            report($e);
+            return response()->json(['status' => 'error', 'message' => 'The account could not be deleted. Try again.'], 500);
+        }
+
+        /* The website's own rows, when this user ever signed in here. */
+        DB::transaction(function () use ($uid) {
+            $vendorUser = VendorUsers::where('uuid', $uid)->first();
+            if ($vendorUser) {
+                User::where('id', $vendorUser->user_id)->delete();
+                $vendorUser->delete();
+            }
+        });
+
+        return response()->json(['status' => 'okay', 'message' => 'Account deleted.'], 200);
     }
 }
