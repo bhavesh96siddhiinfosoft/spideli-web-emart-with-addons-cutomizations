@@ -976,4 +976,8 @@ return [
     'parcel_from_contacts' => 'من جهات الاتصال',
     'parcel_myself_empty' => 'لا يحتوي ملفك الشخصي على اسم أو رقم هاتف بعد.',
     'parcel_contact_no_phone' => 'لا يوجد رقم هاتف لجهة الاتصال هذه.',
+    'addon_each' => 'للواحدة',
+    'addtocart_total' => 'الإجمالي',
+    'addons_unavailable' => 'تعذّر تسعير الإضافات. حاول مرة أخرى.',
+    'cart_addons' => 'الإضافات',
 ];

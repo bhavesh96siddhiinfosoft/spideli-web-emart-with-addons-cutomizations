@@ -343,7 +343,7 @@
                 for (let i = 0; i < orderDetails.products.length; i++) {
                     let product = orderDetails.products[i];
                     let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                    let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                    let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                     order_subtotal += itemGross;
                 }
 
@@ -359,7 +359,7 @@
                     let itemCombinedTax = 0;
                     orderDetails.products.forEach(product => {
                         let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                        let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                        let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                         let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
                         let itemTaxable = Math.max(0, itemGross - itemDiscount);
                         let itemTaxes = product.taxSetting || [];
@@ -457,10 +457,9 @@
                     var extra_html = '';
                     var productPriceTotal = basePrice * parseInt( orderDetails.products[i]['quantity']);
                     var productExtras = 0;
-                    if (orderDetails.products[i].hasOwnProperty('extras_price') && orderDetails.products[i].hasOwnProperty('extras')) {
-                        productPriceTotal += parseFloat(orderDetails.products[i].extras_price) * parseInt(orderDetails.products[i]['quantity']);
-                        productExtras = parseFloat(orderDetails.products[i].extras_price) * parseInt(orderDetails.products[i]['quantity']);
-                    }
+                    /* Point 68: each add-on at its own quantity. */
+                    productExtras = lineAddonsTotal(orderDetails.products[i]);
+                    productPriceTotal += productExtras;
 
                     products_price = "";
                     productPriceTotal_val = "";
@@ -478,25 +477,17 @@
                         name: orderDetails.products[i]['name'],
                         quantity: orderDetails.products[i]['quantity'],
                         price: products_price,
-                        total: productPriceTotal_val
+                        total: productPriceTotal_val,
+                        addons: lineAddonRows(orderDetails.products[i]).map(function (r) {
+                            return {
+                                name: r.name, quantity: r.quantity,
+                                price: r.priced ? formatCurrency(r.unit, orderCurrency) : '',
+                                total: r.priced ? formatCurrency(r.unit * r.quantity, orderCurrency) : ''
+                            };
+                        })
                     });
                     
-                    var extra_html = '';
-                    if (orderDetails.products[i].extras != undefined && orderDetails.products[i].extras != '' && orderDetails.products[i].extras.length > 0) {
-                        extra_html = extra_html + '<span>';
-                        var extra_count = 1;
-                        try {
-                            orderDetails.products[i].extras.forEach((extra) => {
-                                if (extra_count > 1) {
-                                    extra_html = extra_html + ',' + extra;
-                                } else {
-                                    extra_html = extra_html + extra;
-                                }
-                                extra_count++;
-                            });
-                        } catch (error) {}
-                        extra_html = extra_html + '</span>';
-                    }
+                    var extra_html = lineAddonsHtml(orderDetails.products[i], function (amount) { return formatCurrency(amount, orderCurrency); }, "{{ trans('lang.cart_addons') }}");
                     order_items += '<tr>';
                     if (orderDetails.products[i]['photo'] != '') {
                         order_items += '<td class="ord-photo"><img alt="#" src="' + orderDetails.products[i]['photo'] + '" class="img-fluid order_img rounded"></td>';
@@ -513,7 +504,7 @@
                         variant_info += '</ul>';
                         variant_info += '</div>';
                     }
-                    order_items += '<td class="prod-name">' + orderDetails.products[i]['name'] + '<div class="extra"><span>{{ trans('lang.extras') }} :</span><span class="ext-item">' + extra_html + variant_info + '</span></div></td>';
+                    order_items += '<td class="prod-name">' + orderDetails.products[i]['name'] + variant_info + extra_html + '</td>';
                     order_items += '<td class="qunt">x ' + orderDetails.products[i]['quantity'] + '</td>';
                     order_items += '<td class="extras_price">+ ' + productExtras_val + '</td>';
                     order_items += '<td class="product_price">' + products_price + '</td>';

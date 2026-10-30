@@ -396,15 +396,12 @@
                 }
             }
 
-            var extra = [];
-            var extra_price = 0;
-            $('input:checkbox.extra_' + id).each(function () {
-                var sThisVal = (this.checked ? $(this).val() : "");
-                if (sThisVal != '') {
-                    extra_price = parseFloat($(this).attr('data-price')) + extra_price;
-                    extra.push(sThisVal);
-                }
-            });
+            /* Point 68: [{name, quantity}] - the server prices each one from the
+             * product. extra / extra_price still go along for older code. */
+            var addons = readAddonQuantities(id);
+            var extra = addons.map(function (a) { return a.name; });
+            var qtyForExtras = parseInt(quantity) || 0;
+            var extra_price = qtyForExtras > 0 ? addonsSubtotal(id) / qtyForExtras : 0;
 
             var category_id = $('input[name="category_id_' + id + '"]').val();
             var vendor_id = $('input[name="vendor_id"]').val();
@@ -440,6 +437,7 @@
                 _token: '<?php echo csrf_token(); ?>',
                 vendor_id,
                 extra,
+                addons: JSON.stringify(addons),
                 id,
                 quantity,
                 stock_quantity,
@@ -861,6 +859,132 @@
         holder.html(html);
     }
 
+    /* ---- Point 68: add-on steppers and the add-to-cart total ---------- */
+
+    /* The quantities this product's cart line already holds, by lower-cased
+     * name, so the steppers open where the customer left them. A legacy line
+     * charged each add-on once per product unit: it opens at that. */
+    <?php
+    $pageCartAddonLines = [];
+    foreach ((array)($cart['item'] ?? []) as $cartVendorLines) {
+        foreach ((array)$cartVendorLines as $cartLineKey => $cartLine) {
+            $pageCartAddonLines[(string)$cartLineKey] = [
+                'addons' => $cartLine['addons'] ?? null,
+                'extra' => $cartLine['extra'] ?? [],
+                'quantity' => $cartLine['quantity'] ?? 0,
+            ];
+        }
+    }
+    ?>
+    var pageCartAddonLines = <?php echo json_encode((object)$pageCartAddonLines, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+    function cartAddonQuantities(productId) {
+        var line = pageCartAddonLines[productId];
+        if (!line) {
+            Object.keys(pageCartAddonLines).some(function (key) {
+                if (key.indexOf(productId + 'PV') === 0) {
+                    line = pageCartAddonLines[key];
+                    return true;
+                }
+                return false;
+            });
+        }
+        var out = {};
+        if (!line) {
+            return out;
+        }
+        lineAddonRows(Array.isArray(line.addons) ? line : { extras: line.extra, quantity: line.quantity }).forEach(function (r) {
+            out[r.name.toLowerCase()] = r.quantity;
+        });
+        return out;
+    }
+
+    function readAddonQuantities(id) {
+        var list = [];
+        $('#addons_' + id + ' .addon-row').each(function () {
+            var qty = parseInt($(this).find('.addon-qty').val(), 10) || 0;
+            if (qty > 0) {
+                list.push({ name: $(this).attr('data-name'), quantity: qty, price: parseFloat($(this).attr('data-price')) || 0 });
+            }
+        });
+        return list;
+    }
+
+    function addonsSubtotal(id) {
+        return readAddonQuantities(id).reduce(function (s, a) { return s + a.price * a.quantity; }, 0);
+    }
+
+    /* The product's unit price at the quantity in the box - the variant's when
+     * one is chosen, the wholesale tier's when the quantity reaches one (the
+     * same rule as the note above and the cart). */
+    function productUnitPriceNow(id, quantity) {
+        var price = parseFloat($('input[name="price_' + id + '"]').val()) || 0;
+        var disPrice = parseFloat($('input[name="dis_price_' + id + '"]').val()) || 0;
+        var retail = disPrice > 0 ? disPrice : price;
+        var variantRetail = parseFloat($('#variation_info_' + id).find('#variant_price').attr('data-vprice'));
+        if (!isNaN(variantRetail) && variantRetail > 0) {
+            retail = variantRetail;
+        }
+        if (typeof readWholesaleTiers === 'function') {
+            var tiers = readWholesaleTiers(id);
+            var variantPrice = $('#variation_info_' + id).find('#variant_price').attr('data-vwprice');
+            if (variantPrice !== undefined && variantPrice !== '' && typeof variantWholesaleTiers === 'function') {
+                tiers = variantWholesaleTiers(tiers, variantPrice);
+            }
+            var applied = wholesaleTierFor(tiers, quantity, retail);
+            if (applied) {
+                return parseFloat(applied.price) || retail;
+            }
+        }
+        return retail;
+    }
+
+    function refreshAddToCartTotal(id) {
+        if (!id) {
+            return;
+        }
+        $('#addons_' + id + ' .addon-row').each(function () {
+            var qty = parseInt($(this).find('.addon-qty').val(), 10) || 0;
+            var unit = parseFloat($(this).attr('data-price')) || 0;
+            $(this).find('.addon-row-subtotal').text(qty > 0
+                ? qty + ' \u00d7 ' + getProductFormattedPrice(unit) + ' = ' + getProductFormattedPrice(unit * qty) : '');
+        });
+        var quantity = parseInt($('input[name="quantity_' + id + '"]').val() || 0) || 0;
+        var total = productUnitPriceNow(id, quantity) * quantity + addonsSubtotal(id);
+        $('#addtocart_total_' + id).text(getProductFormattedPrice(total));
+    }
+
+    /* Not inside .quantity: siddhi.js steps every .quantity input, and the
+     * product's quantity must never move with an add-on's. */
+    $(document).on('click', '.addon-stepper .addon-inc, .addon-stepper .addon-dec', function () {
+        var input = $(this).closest('.addon-stepper').find('.addon-qty');
+        var qty = parseInt(input.val(), 10) || 0;
+        qty = $(this).hasClass('addon-inc') ? qty + 1 : Math.max(0, qty - 1);
+        input.val(qty);
+        refreshAddToCartTotal($('.add-to-cart').first().attr('data-id'));
+    });
+
+    $(document).on('input', '.addon-stepper .addon-qty', function () {
+        var clean = String($(this).val()).replace(/[^0-9]/g, '');
+        if (clean !== $(this).val()) {
+            $(this).val(clean);
+        }
+        refreshAddToCartTotal($('.add-to-cart').first().attr('data-id'));
+    });
+
+    $(document).on('blur', '.addon-stepper .addon-qty', function () {
+        $(this).val(Math.max(0, parseInt($(this).val(), 10) || 0));
+        refreshAddToCartTotal($('.add-to-cart').first().attr('data-id'));
+    });
+
+    /* The product's quantity, a variant or anything else on the page that
+     * moves the price: the total is redrawn after the page's own handler. */
+    $(document).on('click change keyup', '#product-detail', function () {
+        setTimeout(function () {
+            refreshAddToCartTotal($('.add-to-cart').first().attr('data-id'));
+        }, 0);
+    });
+
     /* The stepper lives in siddhi.js and writes the new value on click, so the
      * floor is held and the note refreshed after that handler has run rather
      * than before it. */
@@ -920,6 +1044,7 @@
                     append_list.innerHTML = html;
                     /* The note starts at the quantity the box starts at. */
                     updateWholesaleNote(snapshots.id);
+                    refreshAddToCartTotal(snapshots.id);
                     jQuery("#overlay").hide();
 
                     const vendorProduct = snapshots.data();
@@ -1646,47 +1771,61 @@
           
             if (vendorProduct.hasOwnProperty('addOnsPrice') && vendorProduct.addOnsPrice.length > 0) {
 
-                html = html + '<div class="addons mt-2 mb-3">';
+                /* Point 68: every add-on has its OWN quantity - a stepper from 0
+                 * (0 = not chosen), independent of the product's quantity.
+                 *
+                 * Its price goes through the same commission as the product's
+                 * own price (footer processVendorData): the store's own rate,
+                 * else the section's, only while the section's commission is
+                 * on. A free add-on stays free. The cart prices it again on the
+                 * server from the product; this is what the customer sees. */
+                var addonCommission = null;
+                if (adminCommissionSettings && adminCommissionSettings.enable === true) {
+                    addonCommission = adminCommissionSettings;
+                    try {
+                        var addonVendorSnap = await database.collection('vendors').doc(vendorProduct.vendorID).get();
+                        if (addonVendorSnap.exists && addonVendorSnap.data().adminCommission) {
+                            addonCommission = addonVendorSnap.data().adminCommission;
+                        }
+                    } catch (addonVendorError) {
+                        console.error('store commission could not be read', addonVendorError);
+                    }
+                }
+                var prefill = cartAddonQuantities(vendorProduct.id);
 
+                html = html + '<div class="addons mt-2 mb-3" id="addons_' + vendorProduct.id + '">';
                 html += '<h3 class="font-weight-bold">{{trans('lang.addons')}}</h3>';
 
-                var total = 0;
-
-                vendorProduct.addOnsPrice.forEach((product_price) => {
-
-                    var PRICE = parseFloat(product_price);
-                    var FINAL_ADDON_PRICE = PRICE; 
-
-                    if (adminCommissionSettings &&                           
-                            adminCommissionSettings.enable === true) {
-
-                            let commission = parseFloat(adminCommissionSettings.commission) || 0;
-
-                            if (adminCommissionSettings.type === "fixed") {
+                vendorProduct.addOnsPrice.forEach((product_price, index) => {
+                    var title = String(vendorProduct.addOnsTitle[index] || '').trim();
+                    if (title === '') {
+                        return;
+                    }
+                    var PRICE = parseFloat(product_price) || 0;
+                    var FINAL_ADDON_PRICE = 0;
+                    if (PRICE > 0) {
+                        FINAL_ADDON_PRICE = PRICE;
+                        if (addonCommission) {
+                            let commission = parseFloat(addonCommission.commission) || 0;
+                            if (addonCommission.type === "fixed") {
                                 FINAL_ADDON_PRICE = PRICE + commission;
-                            } else if (adminCommissionSettings.type === "percentage") {
+                            } else if (addonCommission.type === "percentage") {
                                 FINAL_ADDON_PRICE = PRICE + (PRICE * commission / 100);
                             }
+                        }
+                        FINAL_ADDON_PRICE = parseFloat(FINAL_ADDON_PRICE.toFixed(2));
+                    }
+                    var startQty = prefill[title.toLowerCase()] || 0;
 
-                            FINAL_ADDON_PRICE = parseFloat(FINAL_ADDON_PRICE.toFixed(2));
-                     }
-                    html += '<div class="addons-option">';
-                    html += '<div class="custom-control custom-checkbox border-bottom py-2">';
-
-                    html += '<input data-price="' + FINAL_ADDON_PRICE + '" type="checkbox" id="' +
-                        vendorProduct.id + '_extra_' + total +
-                        '" name="extra_' + vendorProduct.id +
-                        '" value="' + vendorProduct.addOnsTitle[total] +
-                        '" class="custom-control-input extra_' + vendorProduct.id + '">';
-
-                    html += '<label class="custom-control-label" for="' + vendorProduct.id + '_extra_' + total + '">'
-                        + vendorProduct.addOnsTitle[total] +
-                        ' <span class="">+' + getProductFormattedPrice(FINAL_ADDON_PRICE) + '</span></label>';
-
-                    html += '</div>';
-                    html += '</div>';
-
-                    total++;
+                    html += '<div class="addon-row d-flex align-items-center border-bottom py-2" data-name="' + lineAddonEscape(title) + '" data-price="' + FINAL_ADDON_PRICE + '">';
+                    html += '<div class="addon-row-text mr-2"><div class="addon-row-name">' + lineAddonEscape(title) + '</div>';
+                    html += '<small class="text-muted">' + getProductFormattedPrice(FINAL_ADDON_PRICE) + ' {{ trans('lang.addon_each') }}</small>';
+                    html += '<small class="addon-row-subtotal d-block"></small></div>';
+                    html += '<span class="count-number ml-auto addon-stepper">';
+                    html += '<button type="button" class="btn-sm btn btn-outline-secondary addon-dec"><i class="feather-minus"></i></button>';
+                    html += '<input class="count-number-input addon-qty" type="text" inputmode="numeric" value="' + startQty + '">';
+                    html += '<button type="button" class="btn-sm btn btn-outline-secondary addon-inc"><i class="feather-plus"></i></button>';
+                    html += '</span></div>';
                 });
 
                 html = html + '</div>';
@@ -1766,6 +1905,8 @@
             }
 
             html = html + '<div class="addtocart mt-2 mb-3">';
+            /* Point 68: product unit x quantity + each add-on's own subtotal. */
+            html += '<div class="addtocart-total d-flex justify-content-between font-weight-bold mb-2"><span>{{ trans('lang.addtocart_total') }}</span><span id="addtocart_total_' + vendorProduct.id + '"></span></div>';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block' >{{trans('lang.add_to_cart')}}</button>";
             html += '<input type="hidden" name="name_' + vendorProduct.id + '" id="name_' + vendorProduct.id + '" value="' + vendorProduct.name + '">';
             html += '<input type="hidden" id="price_' + vendorProduct.id + '" name="price_' + vendorProduct.id + '" value="' + main_price + '">';

@@ -100,12 +100,53 @@ foreach ($cart['item'] as $key => $value_vendor) {
                     echo '</div>';
                 }
                 ?>
-                <?php if(@$value_item['extra']){ ?>
-                <div class="extras">
-                    <span class="label">{{ trans('lang.extra') }}</span>&nbsp;
-                    <?php if(@is_array($value_item['extra'])){ foreach ($value_item['extra'] as $key3 => $extra) { ?>
-                    <input type="hidden" class="extras_<?php echo @$key1; ?>" value="<?php echo $extra; ?>">
-                    <span class="value"><?php echo $extra; ?>&nbsp;&nbsp;</span>
+                <?php
+                /* Point 68: each add-on at its own quantity, with its own
+                 * stepper (0 removes that add-on, never the line). A legacy
+                 * line - added before this - shows its add-ons at the product's
+                 * quantity, which is what it is charged, with no steppers. */
+                $cartLineAddons = (isset($value_item['addons']) && is_array($value_item['addons']))
+                    ? \App\Support\OrderLineAddons::clean($value_item['addons']) : null;
+                $cartLegacyNames = [];
+                if ($cartLineAddons === null && @is_array($value_item['extra'])) {
+                    foreach ($value_item['extra'] as $legacyName) {
+                        $legacyName = trim(str_replace('"', '', (string)$legacyName));
+                        if ($legacyName !== '') {
+                            $cartLegacyNames[] = $legacyName;
+                        }
+                    }
+                }
+                $cartAddonDigits = (int)(@$cart['decimal_degits'] ?: 0);
+                $cartMoney = function ($amount) use ($cartAddonDigits) {
+                    return '<span class="currency-symbol-left"></span>' . number_format((float)$amount, $cartAddonDigits) . '<span class="currency-symbol-right"></span>';
+                };
+                if (@is_array($value_item['extra'])) {
+                    foreach ($value_item['extra'] as $extra) { ?>
+                    <input type="hidden" class="extras_<?php echo @$key1; ?>" value="<?php echo htmlspecialchars((string)$extra, ENT_QUOTES); ?>">
+                <?php }
+                }
+                if ($cartLineAddons !== null) { ?>
+                    <input type="hidden" id="addons_json_<?php echo @$key1; ?>" value="<?php echo htmlspecialchars(json_encode($cartLineAddons), ENT_QUOTES); ?>">
+                <?php }
+                if ($cartLineAddons || $cartLegacyNames) { ?>
+                <div class="line-addons cart-line-addons">
+                    <div class="line-addons-head"><span>{{ trans('lang.cart_addons') }}</span><span><?php echo $cartMoney(\App\Support\OrderLineAddons::total($value_item)); ?></span></div>
+                    <?php if ($cartLineAddons) { foreach ($cartLineAddons as $cartAddon) { ?>
+                    <div class="line-addon">
+                        <span class="line-addon-qty">&times;<?php echo (int)$cartAddon['quantity']; ?></span>
+                        <span class="line-addon-name"><?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>
+                            <small><?php echo (int)$cartAddon['quantity']; ?> &times; <?php echo $cartMoney($cartAddon['price']); ?> = <?php echo $cartMoney($cartAddon['price'] * $cartAddon['quantity']); ?></small>
+                        </span>
+                        <span class="line-addon-sub cart-addon-stepper">
+                            <button type="button" class="btn btn-sm btn-outline-secondary cart-addon-step" data-step="-1" data-id="<?php echo $key1; ?>" data-vendor="<?php echo $key; ?>" data-name="<?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>" data-qty="<?php echo (int)$cartAddon['quantity']; ?>"><i class="feather-minus"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary cart-addon-step" data-step="1" data-id="<?php echo $key1; ?>" data-vendor="<?php echo $key; ?>" data-name="<?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>" data-qty="<?php echo (int)$cartAddon['quantity']; ?>"><i class="feather-plus"></i></button>
+                        </span>
+                    </div>
+                    <?php } } else { foreach ($cartLegacyNames as $legacyName) { ?>
+                    <div class="line-addon">
+                        <span class="line-addon-qty">&times;<?php echo (int)$value_item['quantity']; ?></span>
+                        <span class="line-addon-name"><?php echo htmlspecialchars($legacyName, ENT_QUOTES); ?></span>
+                    </div>
                     <?php } } ?>
                 </div>
                 <?php } ?>
@@ -174,7 +215,7 @@ foreach ($cart['item'] as $key => $value_vendor) {
                 <span class="currency-symbol-left"></span>
                 <span class="cart_iteam_total_<?php echo $key1; ?>">
                     <?php
-                    $totalItemPrice = ( (float)$value_item['item_price'] + (float)$value_item['extra_price'] ) * (float)$value_item['quantity'];
+                    $totalItemPrice = \App\Support\OrderLineAddons::cartLineTotal($value_item);   // point 68: own add-on quantities
                     $digit_decimal = 0;
                     if (@$cart['decimal_degits']) {
                         $digit_decimal = $cart['decimal_degits'];

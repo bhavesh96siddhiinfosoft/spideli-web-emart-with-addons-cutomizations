@@ -99,9 +99,15 @@
                 "{{ trans('lang.price') }}",
                 "{{ trans('lang.total') }}"
             ]],
-            body: (orderReceipt.items || []).map(function (item) {
-                return [item.name, item.quantity, item.price, item.total];
-            }),
+            /* Point 68: each add-on on its own indented row, at its own
+               quantity, under its product. */
+            body: (orderReceipt.items || []).reduce(function (rows, item) {
+                rows.push([item.name, item.quantity, item.price, item.total]);
+                (item.addons || []).forEach(function (a) {
+                    rows.push(['    + ' + a.name, a.quantity, a.price, a.total]);
+                });
+                return rows;
+            }, []),
             styles: { fontSize: 9, cellPadding: 5 },
             headStyles: { fillColor: [245, 245, 245], textColor: 20 },
             columnStyles: {

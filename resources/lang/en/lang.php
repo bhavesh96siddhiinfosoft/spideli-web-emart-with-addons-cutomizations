@@ -1161,4 +1161,8 @@ return [
     'parcel_from_contacts' => 'From contacts',
     'parcel_myself_empty' => 'Your profile has no name or phone number yet.',
     'parcel_contact_no_phone' => 'This contact has no phone number.',
+    'addon_each' => 'each',
+    'addtocart_total' => 'Total',
+    'addons_unavailable' => 'The add-ons could not be priced. Please try again.',
+    'cart_addons' => 'Addons',
 ];

@@ -305,6 +305,7 @@
                 var quantity = jQuery(this).find('.quantity').val();
                 var extra_price = jQuery(this).find('.extra_price').val();
                 var extra = jQuery(this).find('.extra').val();
+                var addons = jQuery(this).find('.addons').val() || '';
                 var item_price = jQuery(this).find('.item_price').val();
                 var taxSetting = JSON.parse(jQuery(this).find('.taxSetting').val());
 
@@ -346,6 +347,7 @@
                     'stock_quantity': stock_quantity,
                     'extra_price': extra_price,
                     'extra': extra,
+                    'addons': addons,
                     'item_price': item_price,
                     'variant_info': variant_info,
                     'category_id': category_id,
@@ -859,7 +861,7 @@
                     for (let i = 0; i < val.products.length; i++) {
                         let product = val.products[i];
                         let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                        let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                        let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                         order_subtotal += itemGross;
                     }
 
@@ -874,7 +876,7 @@
                         let itemSubtotal = order_subtotal;
                         val.products.forEach(product => {
                             let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                            let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                            let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                             let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
                             let itemTaxable = Math.max(0, itemGross - itemDiscount);
                             let itemTaxes = product.taxSetting || [];
@@ -945,12 +947,11 @@
                         order_subtotal = order_subtotal + parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productPriceTotal = parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productExtras = 0;
-                        if (val.products[i].hasOwnProperty('extras_price') && val.products[i].hasOwnProperty('extras')) {
-                            if (val.products[i].extras_price) {
-                                productPriceTotal += parseFloat(val.products[i].extras_price);
-                                order_subtotal += parseFloat(val.products[i].extras_price);
-                                productExtras = val.products[i].extras_price;
-                            }
+                        /* Point 68: the line's add-ons at their own quantities. The reorder
+                         * gets the per-unit legacy value, or `addons` (below) when present. */
+                        productPriceTotal += lineAddonsTotal(val.products[i]);
+                        if (!Array.isArray(val.products[i].addons) && val.products[i].extras_price) {
+                            productExtras = parseFloat(val.products[i].extras_price) || 0;
                         }
                         var extras = '';
                         if (val.products[i].hasOwnProperty('extras') && val.products[i].extras != null) {
@@ -962,6 +963,7 @@
                         }
 
                         html = html + '<p class="text- font-weight-bold mb-0">' + val.products[i]['name'] + ' x ' + val.products[i]['quantity'] + '</p>';
+                        html = html + lineAddonsHtml(val.products[i], function (amount) { return formatCurrency(amount, orderCurrency); }, "{{ trans('lang.cart_addons') }}");
                         if (val.products[i]['variant_info']) {
                             html = html + '<div class="variant-info">';
                             html = html + '<ul>';
@@ -979,6 +981,9 @@
                         html = html + '<input type="hidden" class="price" value="' + parseFloat(val.products[i]['price']) + '">';
                         html = html + '<input type="hidden" class="quantity" value="' + parseFloat(val.products[i]['quantity']) + '">';
                         html = html + '<input type="hidden" class="extra_price" value="' + parseFloat(productExtras) + '">';
+                        if (Array.isArray(val.products[i].addons)) {
+                            html = html + '<input type="hidden" class="addons" value="' + btoa(unescape(encodeURIComponent(JSON.stringify(val.products[i].addons)))) + '">';
+                        }
                         html = html + '<input type="hidden" class="item_price" value="' + parseFloat(val.products[i]['price']) + '">';
                         if (extras && extras != "null" && extras != null && extras != "") {
                             html = html + '<input type="hidden" class="extra" value="' + extras + '">';
@@ -1116,7 +1121,7 @@
                     for (let i = 0; i < val.products.length; i++) {
                         let product = val.products[i];
                         let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                        let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                        let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                         order_subtotal += itemGross;
                     }
 
@@ -1130,7 +1135,7 @@
                         let itemSubtotal = order_subtotal;
                         val.products.forEach(product => {
                             let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                            let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                            let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                             let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
                             let itemTaxable = Math.max(0, itemGross - itemDiscount);
                             let itemTaxes = product.taxSetting || [];
@@ -1199,12 +1204,11 @@
                         order_subtotal = order_subtotal + parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productPriceTotal = parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productExtras = 0;
-                        if (val.products[i].hasOwnProperty('extras_price') && val.products[i].hasOwnProperty('extras')) {
-                            if (val.products[i].extras_price) {
-                                productPriceTotal += (parseFloat(val.products[i].extras_price) * parseInt(val.products[i]['quantity']));
-                                order_subtotal += (parseFloat(val.products[i].extras_price) * parseInt(val.products[i]['quantity']));
-                                productExtras = (parseFloat(val.products[i].extras_price) * parseInt(val.products[i]['quantity']));
-                            }
+                        /* Point 68: the line's add-ons at their own quantities. The reorder
+                         * gets the per-unit legacy value, or `addons` (below) when present. */
+                        productPriceTotal += lineAddonsTotal(val.products[i]);
+                        if (!Array.isArray(val.products[i].addons) && val.products[i].extras_price) {
+                            productExtras = parseFloat(val.products[i].extras_price) || 0;
                         }
                         var extras = '';
                         if (val.products[i].hasOwnProperty('extras') && val.products[i].extras != '') {
@@ -1215,6 +1219,7 @@
                             size = val.products[i].size;
                         }
                         html = html + '<p class="text- font-weight-bold mb-0">' + val.products[i]['name'] + ' x ' + val.products[i]['quantity'] + '</p>';
+                        html = html + lineAddonsHtml(val.products[i], function (amount) { return formatCurrency(amount, orderCurrency); }, "{{ trans('lang.cart_addons') }}");
                         if (val.products[i]['variant_info']) {
                             html = html + '<div class="variant-info">';
                             html = html + '<ul>';
@@ -1232,6 +1237,9 @@
                         html = html + '<input type="hidden" class="price" value="' + parseFloat(val.products[i]['price']) + '">';
                         html = html + '<input type="hidden" class="quantity" value="' + parseFloat(val.products[i]['quantity']) + '">';
                         html = html + '<input type="hidden" class="extra_price" value="' + parseFloat(productExtras) + '">';
+                        if (Array.isArray(val.products[i].addons)) {
+                            html = html + '<input type="hidden" class="addons" value="' + btoa(unescape(encodeURIComponent(JSON.stringify(val.products[i].addons)))) + '">';
+                        }
                         html = html + '<input type="hidden" class="item_price" value="' + parseFloat(val.products[i]['price']) + '">';
                         html = html + '<input type="hidden" class="extra" value="' + extras + '">';
                         html = html + '<input type="hidden" class="size" value="' + size + '">';
@@ -1338,7 +1346,7 @@
                     for (let i = 0; i < val.products.length; i++) {
                         let product = val.products[i];
                         let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                        let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                        let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                         order_subtotal += itemGross;
                     }
 
@@ -1353,7 +1361,7 @@
                         let itemSubtotal = order_subtotal;
                         val.products.forEach(product => {
                             let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                            let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                            let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                             let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
                             let itemTaxable = Math.max(0, itemGross - itemDiscount);
                             let itemTaxes = product.taxSetting || [];
@@ -1423,12 +1431,11 @@
                         order_subtotal = order_subtotal + parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productPriceTotal = parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productExtras = 0;
-                        if (val.products[i].hasOwnProperty('extras_price') && val.products[i].hasOwnProperty('extras')) {
-                            if (val.products[i].extras_price) {
-                                productPriceTotal += parseFloat(val.products[i].extras_price);
-                                order_subtotal += parseFloat(val.products[i].extras_price);
-                                productExtras = val.products[i].extras_price;
-                            }
+                        /* Point 68: the line's add-ons at their own quantities. The reorder
+                         * gets the per-unit legacy value, or `addons` (below) when present. */
+                        productPriceTotal += lineAddonsTotal(val.products[i]);
+                        if (!Array.isArray(val.products[i].addons) && val.products[i].extras_price) {
+                            productExtras = parseFloat(val.products[i].extras_price) || 0;
                         }
                         var extras = '';
                         if (val.products[i].hasOwnProperty('extras') && val.products[i].extras != '') {
@@ -1439,6 +1446,7 @@
                             size = val.products[i].size;
                         }
                         html = html + '<p class="text- font-weight-bold mb-0">' + val.products[i]['name'] + ' x ' + val.products[i]['quantity'] + '</p>';
+                        html = html + lineAddonsHtml(val.products[i], function (amount) { return formatCurrency(amount, orderCurrency); }, "{{ trans('lang.cart_addons') }}");
                         if (val.products[i]['variant_info']) {
                             html = html + '<div class="variant-info">';
                             html = html + '<ul>';
@@ -1456,6 +1464,9 @@
                         html = html + '<input type="hidden" class="price" value="' + parseFloat(val.products[i]['price']) + '">';
                         html = html + '<input type="hidden" class="quantity" value="' + parseFloat(val.products[i]['quantity']) + '">';
                         html = html + '<input type="hidden" class="extra_price" value="' + parseFloat(productExtras) + '">';
+                        if (Array.isArray(val.products[i].addons)) {
+                            html = html + '<input type="hidden" class="addons" value="' + btoa(unescape(encodeURIComponent(JSON.stringify(val.products[i].addons)))) + '">';
+                        }
                         html = html + '<input type="hidden" class="item_price" value="' + parseFloat(val.products[i]['price']) + '">';
                         html = html + '<input type="hidden" class="extra" value="' + extras + '">';
                         html = html + '<input type="hidden" class="size" value="' + size + '">';
@@ -1561,7 +1572,7 @@
                     for (let i = 0; i < val.products.length; i++) {
                         let product = val.products[i];
                         let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                        let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                        let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                         order_subtotal += itemGross;
                     }
 
@@ -1576,7 +1587,7 @@
                         let itemSubtotal = order_subtotal;
                         val.products.forEach(product => {
                             let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                            let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                            let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                             let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
                             let itemTaxable = Math.max(0, itemGross - itemDiscount);
                             let itemTaxes = product.taxSetting || [];
@@ -1647,12 +1658,11 @@
                         order_subtotal = order_subtotal + parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productPriceTotal = parseFloat(val.products[i]['price']) * parseFloat(val.products[i]['quantity']);
                         var productExtras = 0;
-                        if (val.products[i].hasOwnProperty('extras_price') && val.products[i].hasOwnProperty('extras')) {
-                            if (val.products[i].extras_price) {
-                                productPriceTotal += parseFloat(val.products[i].extras_price);
-                                order_subtotal += parseFloat(val.products[i].extras_price);
-                                productExtras = val.products[i].extras_price;
-                            }
+                        /* Point 68: the line's add-ons at their own quantities. The reorder
+                         * gets the per-unit legacy value, or `addons` (below) when present. */
+                        productPriceTotal += lineAddonsTotal(val.products[i]);
+                        if (!Array.isArray(val.products[i].addons) && val.products[i].extras_price) {
+                            productExtras = parseFloat(val.products[i].extras_price) || 0;
                         }
                         var extras = '';
                         if (val.products[i].hasOwnProperty('extras') && val.products[i].extras != '') {
@@ -1663,6 +1673,7 @@
                             size = val.products[i].size;
                         }
                         html = html + '<p class="text- font-weight-bold mb-0">' + val.products[i]['name'] + ' x ' + val.products[i]['quantity'] + '</p>';
+                        html = html + lineAddonsHtml(val.products[i], function (amount) { return formatCurrency(amount, orderCurrency); }, "{{ trans('lang.cart_addons') }}");
                         if (val.products[i]['variant_info']) {
                             html = html + '<div class="variant-info">';
                             html = html + '<ul>';
@@ -1679,6 +1690,9 @@
                         html = html + '<input type="hidden" class="price" value="' + parseFloat(val.products[i]['price']) + '">';
                         html = html + '<input type="hidden" class="quantity" value="' + parseFloat(val.products[i]['quantity']) + '">';
                         html = html + '<input type="hidden" class="extra_price" value="' + parseFloat(productExtras) + '">';
+                        if (Array.isArray(val.products[i].addons)) {
+                            html = html + '<input type="hidden" class="addons" value="' + btoa(unescape(encodeURIComponent(JSON.stringify(val.products[i].addons)))) + '">';
+                        }
                         html = html + '<input type="hidden" class="item_price" value="' + parseFloat(val.products[i]['price']) + '">';
                         html = html + '<input type="hidden" class="extra" value="' + extras + '">';
                         html = html + '<input type="hidden" class="size" value="' + size + '">';

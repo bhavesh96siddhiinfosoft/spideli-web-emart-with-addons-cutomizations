@@ -98,6 +98,22 @@ class ProductController extends Controller
             exit;
         }
 
+        /* Point 68: each add-on at its own quantity. The page posts only
+         * [{name, quantity}]; the prices come from the product itself
+         * (OrderLineAddons::price), never from the browser. */
+        $lineAddons = null;
+        if (array_key_exists('addons', $req)) {
+            $requestedAddons = is_string($req['addons']) ? json_decode($req['addons'], true) : $req['addons'];
+            $requestedAddons = array_filter((array)$requestedAddons, function ($a) {
+                return is_array($a) && (int)($a['quantity'] ?? 0) > 0;
+            });
+            $lineAddons = $requestedAddons ? \App\Support\OrderLineAddons::price($req['id'], $requestedAddons) : [];
+            if ($lineAddons === null) {
+                echo json_encode(['status' => false, 'message' => trans('lang.addons_unavailable')]);
+                exit;
+            }
+        }
+
         // Add item
         if (isset($req['variant_info']) && !empty($req['variant_info']['variant_id'])) {
             $id = $id . 'PV' . $req['variant_info']['variant_id'];
@@ -142,6 +158,12 @@ class ProductController extends Controller
 
         $cart['item'][$vendor_id][$id] = $this->applyWholesalePrice($cart['item'][$vendor_id][$id]);
 
+        /* One line per product (per variant): re-adding replaces its add-ons. */
+        if ($lineAddons !== null) {
+            $cart['item'][$vendor_id][$id]['addons'] = $lineAddons;
+            $cart['item'][$vendor_id][$id] = \App\Support\OrderLineAddons::syncCompat($cart['item'][$vendor_id][$id]);
+        }
+
         // Store info
         $cart['vendor'] = [
             'id' => $vendor_id,
@@ -153,7 +175,7 @@ class ProductController extends Controller
         // Item subtotal before discount
         $itemSubtotal = 0;
         foreach ($cart['item'][$vendor_id] as $item) {
-            $itemSubtotal += ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+            $itemSubtotal += \App\Support\OrderLineAddons::cartLineTotal($item);
         }
         
         // Calculate discount (coupon + special offer)
@@ -219,7 +241,7 @@ class ProductController extends Controller
         if ($cart['taxScope'] === 'product') {
             foreach ($cart['item'] as $vendorItemsKey => $vendorItems) {
                 foreach ($vendorItems as $itemKey => $item) {
-                    $itemGross = ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+                    $itemGross = \App\Support\OrderLineAddons::cartLineTotal($item);
                     $itemDiscount = ($itemSubtotal > 0) ? ($itemGross / $itemSubtotal) * $totalDiscount : 0;
                     $itemTaxable = max(0, $itemGross - $itemDiscount);
 
@@ -616,6 +638,30 @@ class ProductController extends Controller
             if ($value['image']) {
                 $image = $value['image'];
             }
+            /* Point 68: a line with `addons` keeps its quantities (priced again
+             * from the product); a legacy line is converted, each add-on at the
+             * order line's quantity - unless a name is no longer on the
+             * product, when it stays legacy rather than guess. */
+            $productId = (string)$id;
+            $reorderAddons = null;
+            $orderAddons = $value['addons'] ?? null;
+            if (is_string($orderAddons) && $orderAddons !== '') {
+                $orderAddons = json_decode(base64_decode($orderAddons), true);
+            }
+            if (is_array($orderAddons)) {
+                $reorderAddons = \App\Support\OrderLineAddons::price($productId, $orderAddons) ?? [];
+            } elseif (is_array($extra) && count(array_filter($extra, 'strlen')) > 0) {
+                $names = array_values(array_filter(array_map('trim', $extra), 'strlen'));
+                $titles = \App\Support\OrderLineAddons::productAddonTitles($productId);
+                $known = $titles === null ? [] : array_map(function ($t) { return mb_strtolower(trim($t)); }, $titles);
+                $allKnown = $titles !== null && !array_diff(array_map('mb_strtolower', $names), $known);
+                if ($allKnown) {
+                    $reorderAddons = \App\Support\OrderLineAddons::price($productId, array_map(function ($n) use ($quantity) {
+                        return ['name' => $n, 'quantity' => (int)$quantity];
+                    }, $names));
+                }
+            }
+
             /*by thm*/
             if (isset($req['variant_info']) && !empty($req['variant_info']['variant_id'])) {
                 $id = $id . 'PV' . $req['variant_info']['variant_id'];
@@ -627,7 +673,9 @@ class ProductController extends Controller
                 "item_price" => @$item_price,
                 "price" => ($quantity * $price),
                 "dis_price" => @$req['dis_price'],
-                "extra_price" => ($quantity * $extra_price),
+                /* Per unit, as add-to-cart writes it - it was multiplied by the
+                   quantity here, which the cart then multiplied again. */
+                "extra_price" => $extra_price,
                 "extra" => @$extra,
                 "image" => @$image,
                 "variant_info" => @$req['variant_info'],
@@ -635,6 +683,10 @@ class ProductController extends Controller
                 "taxSetting" => @$value['taxSetting'] ?? [],
                 "delivery_charges" => @$value['delivery_charges'] ?? []
             ];
+            if ($reorderAddons !== null) {
+                $cart['item'][$vendor_id][$id]['addons'] = $reorderAddons;
+                $cart['item'][$vendor_id][$id] = \App\Support\OrderLineAddons::syncCompat($cart['item'][$vendor_id][$id]);
+            }
         }
 
         $cart['vendor'] = [
@@ -647,7 +699,7 @@ class ProductController extends Controller
         // Item subtotal before discount
         $itemSubtotal = 0;
         foreach ($cart['item'][$vendor_id] as $item) {
-            $itemSubtotal += ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+            $itemSubtotal += \App\Support\OrderLineAddons::cartLineTotal($item);
         }
 
         // Calculate discount (coupon + special offer)
@@ -706,7 +758,7 @@ class ProductController extends Controller
         if ($cart['taxScope'] === 'product') {
             foreach ($cart['item'] as $vendorItemsKey => $vendorItems) {
                 foreach ($vendorItems as $itemKey => $item) {
-                    $itemGross = ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+                    $itemGross = \App\Support\OrderLineAddons::cartLineTotal($item);
                     $itemDiscount = ($itemSubtotal > 0) ? ($itemGross / $itemSubtotal) * $totalDiscount : 0;
                     $itemTaxable = max(0, $itemGross - $itemDiscount);
 
@@ -853,6 +905,9 @@ class ProductController extends Controller
                  * raises it to ten in the cart pays retail for all ten -
                  * the commonest path to a wholesale quantity there is. */
                 $cart['item'][$vendor_id][$id] = $this->applyWholesalePrice($cart['item'][$vendor_id][$id]);
+                /* Point 68: the product's quantity never changes an add-on's.
+                   Only the compatibility per-unit value is re-derived. */
+                $cart['item'][$vendor_id][$id] = \App\Support\OrderLineAddons::syncCompat($cart['item'][$vendor_id][$id]);
             }
         }
 
@@ -864,6 +919,52 @@ class ProductController extends Controller
         $cart = Session::get('cart');
         $res = array('status' => true, 'html' => view('vendor.cart_item', ['cart' => $cart, 'is_checkout' => 1])->render());
         echo json_encode($res);
+        exit;
+    }
+
+    /* Point 68: sets one add-on's quantity on one cart line. 0 removes that
+     * add-on, never the line. Only lines in the new format have steppers. */
+    public function changeAddonQuantityCart(Request $request)
+    {
+        $id = (string)$request->input('id');
+        $vendor_id = (string)$request->input('vendor_id');
+        $name = trim((string)$request->input('name'));
+        $quantity = max(0, (int)$request->input('quantity'));
+        $cart = Session::get('cart', []);
+
+        if (isset($cart['item'][$vendor_id][$id]['addons']) && is_array($cart['item'][$vendor_id][$id]['addons'])) {
+            $line = $cart['item'][$vendor_id][$id];
+            $addons = [];
+            $found = false;
+            foreach ($line['addons'] as $a) {
+                if (mb_strtolower(trim((string)($a['name'] ?? ''))) === mb_strtolower($name)) {
+                    $found = true;
+                    if ($quantity > 0) {
+                        $a['quantity'] = $quantity;
+                        $addons[] = $a;
+                    }
+                    continue;
+                }
+                $addons[] = $a;
+            }
+            if (!$found && $quantity > 0) {
+                /* An add-on of the product not on the line yet: priced from the product. */
+                $priced = \App\Support\OrderLineAddons::price(explode('PV', $id)[0], [['name' => $name, 'quantity' => $quantity]]);
+                if ($priced) {
+                    $addons[] = $priced[0];
+                }
+            }
+            $line['addons'] = $addons;
+            $cart['item'][$vendor_id][$id] = \App\Support\OrderLineAddons::syncCompat($line);
+        }
+
+        $this->recalculateCartDeliveryCharge($cart);
+        $cart = $this->calculateTax($cart);
+        Session::put('cart', $cart);
+        Session::save();
+
+        $cart = Session::get('cart');
+        echo json_encode(['status' => true, 'html' => view('vendor.cart_item', ['cart' => $cart, 'is_checkout' => 1])->render()]);
         exit;
     }
 
@@ -1073,7 +1174,7 @@ class ProductController extends Controller
         // Item subtotal before discount
         $itemSubtotal = 0;
         foreach ($cart['item'][$vendor_id] as $item) {
-            $itemSubtotal += ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+            $itemSubtotal += \App\Support\OrderLineAddons::cartLineTotal($item);
         }
         
         // Calculate discount (coupon + special offer)
@@ -1112,7 +1213,7 @@ class ProductController extends Controller
         if ($cart['taxScope'] === 'product') {
             foreach ($cart['item'] as $vendorItemsKey => $vendorItems) {
                 foreach ($vendorItems as $itemKey => $item) {
-                    $itemGross = ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+                    $itemGross = \App\Support\OrderLineAddons::cartLineTotal($item);
                     $itemDiscount = ($itemSubtotal > 0) ? ($itemGross / $itemSubtotal) * $totalDiscount : 0;
                     $itemTaxable = max(0, $itemGross - $itemDiscount);
                     $itemTaxes = [];

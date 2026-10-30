@@ -943,7 +943,7 @@
                             }
                             let itemDeliveryCharges = (cart.item && cart.item[vendorID] && cart.item[vendorID][item_id] && cart.item[vendorID][item_id].delivery_charges) ? cart.item[vendorID][item_id].delivery_charges : [];
 
-                            products.push({
+                            var orderLine = {
                                 'id': product_id,
                                 'name': name,
                                 'photo': photo,
@@ -965,7 +965,19 @@
                                 'category_id': category_id,
                                 'taxSetting': taxSettingConvert,
                                 'delivery_charges': itemDeliveryCharges,
-                            })
+                            };
+                            /* Point 68: each add-on at its own quantity, priced on
+                             * the server when it was added to the cart. A legacy
+                             * cart line (no `addons`) stays legacy. */
+                            var lineAddonsJson = $("#addons_json_" + item_id).val();
+                            if (lineAddonsJson !== undefined) {
+                                try {
+                                    writeAddons(orderLine, JSON.parse(lineAddonsJson));
+                                } catch (addonsError) {
+                                    console.error('add-ons could not be read', addonsError);
+                                }
+                            }
+                            products.push(orderLine);
                         });
 
                         manageInventory(products);

@@ -1459,7 +1459,7 @@
             for (let i = 0; i < (orderDetails.products || []).length; i++) {
                 let product = orderDetails.products[i];
                 let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                 order_subtotal += itemGross;
             }
 
@@ -1474,7 +1474,7 @@
                 let itemCombinedTax = 0;
                 (orderDetails.products || []).forEach(product => {
                     let basePrice = (product.discountPrice && parseFloat(product.discountPrice) > 0) ? parseFloat(product.discountPrice) : parseFloat(product.price);
-                    let itemGross = (basePrice + parseFloat(product.extras_price || 0)) * parseInt(product.quantity);
+                    let itemGross = basePrice * parseInt(product.quantity) + lineAddonsTotal(product);   // point 68
                     let itemDiscount = (itemSubtotal > 0) ? (itemGross / itemSubtotal) * total_discount : 0;
                     let itemTaxable = Math.max(0, itemGross - itemDiscount);
                     let itemTaxes = product.taxSetting || [];
@@ -1566,21 +1566,12 @@
                 var price_item = basePriceValue.toFixed(decimal_degits);
                 var totalProductPrice = parseFloat(price_item) * parseInt(product.quantity);
                 
-                if (product.extras != undefined && product.extras != '' && product.extras.length > 0) {
-                    var extra_count = 0;
-                    let extras_price_item = (parseFloat(product.extras_price || 0) * parseInt(product.quantity));
-                    if (!isNaN(extras_price_item)) {
-                        extras_price = extras_price_item.toFixed(decimal_degits);
-                        totalProductPrice += parseFloat(extras_price);
-                    }
-                    product.extras.forEach((extra) => {
-                        if (extra_count > 1) {
-                            extra_html = extra_html + ',' + extra;
-                        } else {
-                            extra_html = extra_html + extra;
-                        }
-                        extra_count++;
-                    })
+                /* Point 68: add-ons as "name x quantity", with their own total. */
+                var extra_count = lineAddonRows(product).length;
+                if (extra_count > 0) {
+                    extras_price = lineAddonsTotal(product).toFixed(decimal_degits);
+                    totalProductPrice += parseFloat(extras_price);
+                    extra_html = lineAddonEscape(lineAddonsText(product));
                 }
                 productDetailsHtml += '<td style="width: 20%; border-top: 1px solid rgb(0, 0, 0);">';
                 productDetailsHtml += product.name;
@@ -5239,6 +5230,150 @@
     });
     
 
+
+        /* ---- Add-ons at their own quantity (client point 68) -------------
+         *
+         * Every add-on on an order line has its own quantity, independent of
+         * the product's: 2 Organic Eggs, 3 Cold Pack, 1 Insulated Bag.
+         *   line total = unit x quantity + sum(addon.price x addon.quantity)
+         * Contract: ADDON-QUANTITY-SPEC.md (30 Oct 2026), section 3. These
+         * are byte-identical in the website footer and the admin and store
+         * layouts, so a basket totals the same wherever it is opened.
+         *
+         * A line WITHOUT `addons` is a legacy line: its add-ons are the names
+         * in `extras`, charged `extras_price` once per product unit. A line
+         * WITH it still carries extras / extras_price (= add-ons total /
+         * quantity) for readers that predate it - never compute from those.
+         * ------------------------------------------------------------------ */
+        function lineAddonsTotal(line) {
+            if (line && Array.isArray(line.addons)) {
+                return line.addons.reduce(function (sum, a) {
+                    return sum + (parseFloat(a && a.price) || 0) * (parseInt(a && a.quantity, 10) || 0);
+                }, 0);
+            }
+            return (parseFloat(line && line.extras_price) || 0) * (parseInt(line && line.quantity, 10) || 0); // legacy
+        }
+
+        /* The add-ons to list on a line. A legacy line charged each once per
+         * product unit, so each shows at the product's quantity and only the
+         * group total is priced. */
+        function lineAddonRows(line) {
+            if (line && Array.isArray(line.addons)) {
+                return line.addons
+                    .filter(function (a) { return a && String(a.name || '').trim() !== '' && (parseInt(a.quantity, 10) || 0) > 0; })
+                    .map(function (a) { return { name: String(a.name).trim(), quantity: parseInt(a.quantity, 10), unit: parseFloat(a.price) || 0, priced: true }; });
+            }
+            var extras = line && line.extras;
+            if (typeof extras === 'string') {
+                extras = extras.split(',');
+            }
+            return (Array.isArray(extras) ? extras : [])
+                .map(function (n) { return String(n).replace(/"/g, '').trim(); })
+                .filter(function (n) { return n !== ''; })
+                .map(function (n) { return { name: n, quantity: parseInt(line.quantity, 10) || 0, unit: null, priced: false }; });
+        }
+
+        function lineTotal(line) {
+            var unit = (parseFloat(line.discountPrice) || 0) > 0 ? parseFloat(line.discountPrice) : (parseFloat(line.price) || 0);
+            return unit * (parseInt(line.quantity, 10) || 0) + lineAddonsTotal(line);
+        }
+
+        /* For a screen that CREATES an order line (website checkout, POS). */
+        function writeAddons(line, addons) {
+            var kept = (addons || []).filter(function (a) { return a && String(a.name || '').trim() !== '' && (parseInt(a.quantity, 10) || 0) > 0; });
+            var total = kept.reduce(function (s, a) { return s + (parseFloat(a.price) || 0) * parseInt(a.quantity, 10); }, 0);
+            var quantity = parseInt(line.quantity, 10) || 0;
+            line.addons = kept.map(function (a) { return { name: String(a.name).trim(), price: String(a.price), quantity: parseInt(a.quantity, 10) }; });
+            line.extras = line.addons.map(function (a) { return a.name; });
+            line.extras_price = quantity > 0 ? String(total / quantity) : "0";
+            return line;
+        }
+
+        function lineAddonEscape(text) {
+            return String(text).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        /* The add-on block under a product: each add-on with its own quantity
+         * first (x3), its name, quantity x unit and subtotal, then the total.
+         * `money` formats an amount in the order's currency. '' when none. */
+        function lineAddonsHtml(line, money, title) {
+            var rows = lineAddonRows(line);
+            if (!rows.length) {
+                return '';
+            }
+            var html = '<div class="line-addons">';
+            html += '<div class="line-addons-head"><span>' + lineAddonEscape(title || 'Addons') + '</span><span>' + money(lineAddonsTotal(line)) + '</span></div>';
+            rows.forEach(function (r) {
+                html += '<div class="line-addon"><span class="line-addon-qty">&times;' + r.quantity + '</span>';
+                html += '<span class="line-addon-name">' + lineAddonEscape(r.name);
+                if (r.priced) {
+                    html += '<small>' + r.quantity + ' &times; ' + money(r.unit) + '</small>';
+                }
+                html += '</span><span class="line-addon-sub">' + (r.priced ? money(r.unit * r.quantity) : '') + '</span></div>';
+            });
+            return html + '</div>';
+        }
+
+        /* "Cold Pack x 3; Insulated Bag x 1" - for exports and short lists. */
+        function lineAddonsText(line) {
+            return lineAddonRows(line).map(function (r) { return r.name + ' x ' + r.quantity; }).join('; ');
+        }
+
+        (function () {
+            if (document.getElementById('line-addons-style')) {
+                return;
+            }
+            var css = '.line-addons{margin:4px 0 2px;font-size:12px;line-height:1.35}'
+                + '.line-addons-head{display:flex;justify-content:space-between;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:11px;opacity:.8}'
+                + '.line-addon{display:flex;align-items:flex-start;gap:6px;padding:2px 0}'
+                + '.line-addon-qty{flex:0 0 auto;font-weight:700;border:1px solid currentColor;border-radius:10px;padding:0 6px;font-size:11px}'
+                + '.line-addon-name{flex:1 1 auto;min-width:0}'
+                + '.line-addon-name small{display:block;opacity:.7}'
+                + '.line-addon-sub{flex:0 0 auto;white-space:nowrap}';
+            var style = document.createElement('style');
+            style.id = 'line-addons-style';
+            style.appendChild(document.createTextNode(css));
+            (document.head || document.documentElement).appendChild(style);
+        })();
+
+        /* Point 68: an add-on's own +/- in the cart. Sets that add-on only
+         * (0 removes it, never the line) and redraws the cart, as the
+         * product's own stepper does. */
+        $(document).on('click', '.cart-addon-step', function () {
+            var $b = $(this);
+            var quantity = Math.max(0, (parseInt($b.attr('data-qty'), 10) || 0) + (parseInt($b.attr('data-step'), 10) || 0));
+            $('.cart-addon-step').prop('disabled', true);
+            $.ajax({
+                type: 'POST',
+                url: "<?php echo route('change-addon-quantity-cart'); ?>",
+                data: {
+                    _token: '<?php echo csrf_token(); ?>',
+                    vendor_id: $b.attr('data-vendor'),
+                    id: $b.attr('data-id'),
+                    name: $b.attr('data-name'),
+                    quantity: quantity
+                },
+                success: function (data) {
+                    data = typeof data === 'string' ? JSON.parse(data) : data;
+                    if (data && data.html) {
+                        $('#cart_list').html(data.html);
+                    }
+                    if (typeof loadcurrencynew === 'function') {
+                        loadcurrencynew();
+                    } else if (typeof loadcurrency === 'function') {
+                        loadcurrency();
+                    }
+                    if (typeof getAdminCommission === 'function') {
+                        getAdminCommission();
+                    }
+                },
+                complete: function () {
+                    $('.cart-addon-step').prop('disabled', false);
+                }
+            });
+        });
 
         /* ---- Addresses: never print the word "null" ----------------------
          *

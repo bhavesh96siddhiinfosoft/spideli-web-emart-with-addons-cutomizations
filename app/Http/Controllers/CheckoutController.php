@@ -60,7 +60,7 @@ class CheckoutController extends Controller
         // Item subtotal before discount
         $itemSubtotal = 0;
         foreach ($cart['item'][$vendor_id] as $item) {
-            $itemSubtotal += ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+            $itemSubtotal += \App\Support\OrderLineAddons::cartLineTotal($item);
         }
         
         // Calculate discount (coupon + special offer)
@@ -99,7 +99,7 @@ class CheckoutController extends Controller
         if ($cart['taxScope'] === 'product') {
             foreach ($cart['item'] as $vendorItemsKey => $vendorItems) {
                 foreach ($vendorItems as $itemKey => $item) {
-                    $itemGross = ($item['item_price'] + ($item['extra_price'] ?? 0)) * $item['quantity'];
+                    $itemGross = \App\Support\OrderLineAddons::cartLineTotal($item);
                     $itemDiscount = ($itemSubtotal > 0) ? ($itemGross / $itemSubtotal) * $totalDiscount : 0;
                     $itemTaxable = max(0, $itemGross - $itemDiscount);
                     $itemTaxes = [];

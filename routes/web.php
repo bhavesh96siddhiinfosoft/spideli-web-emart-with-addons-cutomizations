@@ -106,6 +106,7 @@ Route::post('reorder-add-to-cart', [ProductController::class, 'reorderaddToCart'
 Route::post('update-cart', [ProductController::class, 'update'])->name('update-cart');
 Route::post('remove-from-cart', [ProductController::class, 'remove'])->name('remove-from-cart');
 Route::post('change-quantity-cart', [ProductController::class, 'changeQuantityCart'])->name('change-quantity-cart');
+Route::post('change-addon-quantity-cart', [ProductController::class, 'changeAddonQuantityCart'])->name('change-addon-quantity-cart');
 Route::post('apply-coupon', [ProductController::class, 'applyCoupon'])->name('apply-coupon');
 Route::post('remove-coupon', [ProductController::class, 'removeCoupon'])->name('remove-coupon');
 Route::get('checkout', [CheckoutController::class, 'checkout'])->name('checkout');
