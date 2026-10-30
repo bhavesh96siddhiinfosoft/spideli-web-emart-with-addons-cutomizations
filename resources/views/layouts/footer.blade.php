@@ -3708,19 +3708,36 @@
             : products;
     }
 
-    async function fetchVendorPriceData() {
+    /* Point 79: with a store id, only that store and its own products are
+     * read. Without one, every store and every product on the platform is
+     * read, as before - the shop page used to do that too (30 stores and 310
+     * products, 30 Oct) before showing a shop of 11. Prices are the same
+     * either way: a product's price only depends on its own store. */
+    async function fetchVendorPriceData(onlyVendorId) {
         let priceData = {}; // To store price data for each vendor
         let adminCommissionSettings = localStorage.getItem('adminCommissionSettings');
         // Check if admin commission settings exist
         if (adminCommissionSettings && adminCommissionSettings !== undefined) {
             adminCommissionSettings = JSON.parse(adminCommissionSettings);
-            // Fetch all vendors in parallel
-            const vendorSnapshot = await database.collection('vendors').get();
             const vendorCommissions = {};
-            vendorSnapshot.docs.forEach(doc => {
-                vendorCommissions[doc.id] = doc.data().adminCommission || adminCommissionSettings;
-            });
-            const productSnapshot = await database.collection('vendor_products').get();
+            let productSnapshot;
+            if (onlyVendorId) {
+                const [vendorDoc, storeProducts] = await Promise.all([
+                    database.collection('vendors').doc(onlyVendorId).get(),
+                    database.collection('vendor_products').where('vendorID', '==', onlyVendorId).get()
+                ]);
+                if (vendorDoc.exists) {
+                    vendorCommissions[vendorDoc.id] = vendorDoc.data().adminCommission || adminCommissionSettings;
+                }
+                productSnapshot = storeProducts;
+            } else {
+                // Fetch all vendors in parallel
+                const vendorSnapshot = await database.collection('vendors').get();
+                vendorSnapshot.docs.forEach(doc => {
+                    vendorCommissions[doc.id] = doc.data().adminCommission || adminCommissionSettings;
+                });
+                productSnapshot = await database.collection('vendor_products').get();
+            }
             const promises = productSnapshot.docs.map(doc => {
                 const productData = doc.data();
                 const vendorID = productData.vendorID;

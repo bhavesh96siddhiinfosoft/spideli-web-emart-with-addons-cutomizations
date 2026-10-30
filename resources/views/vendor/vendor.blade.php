@@ -146,7 +146,7 @@
     jQuery("#overlay").show();
      $(document).ready(async function() {
         inValidProductIds = await getUserItemLimit(vendorID);
-        priceData = await fetchVendorPriceData();
+        priceData = await fetchVendorPriceData(vendorID);   // this store only (point 79)
         /* Whether this customer may see wholesale at all - awaited before any
          * card is drawn, because the filter below depends on the answer. */
         await businessAccountReady;
@@ -306,6 +306,7 @@
             product_list.innerHTML = html !== ''
                 ? html
                 : '<p class="text-center font-weight-bold mt-4 w-100">{{ trans('lang.no_results') }}</p>';
+            p79ShowMore();
 
             jQuery("#overlay").hide();
         }).catch(function (error) {
@@ -332,11 +333,65 @@
 
         alldata = withoutHiddenWholesale(alldata);
 
-        var count = 0;
-        var popularFoodCount = 0;
+        /* Point 79: the cards are drawn P79_PAGE at a time - the first page
+         * at once, the next when the customer scrolls near the end (or taps
+         * "Load More") - so a category of 30+ products does not draw, and
+         * download the images of, every card before the page shows. */
+        p79Products = alldata;
+        p79Shown = 0;
         if (alldata.length > 0) {
-            html = html + '<div class="row">';
-            alldata.forEach((listval) => {
+            html = '<div class="row" id="p79-product-row"></div>'
+                + '<div id="p79-more-wrap" class="text-center w-100 my-3" style="display:none">'
+                + '<button type="button" id="p79-more" class="btn btn-outline-secondary">{{ trans('lang.load_more') }}</button></div>';
+        }
+        return html;
+    }
+
+    var P79_PAGE = 12;
+    var p79Products = [];
+    var p79Shown = 0;
+
+    function p79ShowMore() {
+        var row = document.getElementById('p79-product-row');
+        if (!row) {
+            return;
+        }
+        var next = p79Products.slice(p79Shown, p79Shown + P79_PAGE);
+        row.insertAdjacentHTML('beforeend', next.map(productCardHtml).join(''));
+        p79Shown += next.length;
+
+        var wrap = document.getElementById('p79-more-wrap');
+        wrap.style.display = p79Shown < p79Products.length ? '' : 'none';
+    }
+
+    /* The next page when the customer scrolls to within 300px of the end of
+     * the list. A plain scroll check rather than an IntersectionObserver: it
+     * behaves the same in every browser and is easy to reason about. */
+    function p79NearEnd() {
+        var wrap = document.getElementById('p79-more-wrap');
+        return !!wrap && wrap.style.display !== 'none'
+            && wrap.getBoundingClientRect().top < window.innerHeight + 300;
+    }
+
+    var p79ScrollTimer = null;
+    $(window).on('scroll resize', function () {
+        if (p79ScrollTimer) {
+            return;
+        }
+        p79ScrollTimer = setTimeout(function () {
+            p79ScrollTimer = null;
+            if (p79NearEnd()) {
+                p79ShowMore();
+            }
+        }, 150);
+    });
+
+    $(document).on('click', '#p79-more', function () {
+        p79ShowMore();
+    });
+
+    function productCardHtml(listval) {
+                var html = '';
                 var val = listval;
                 var vendor_id_single = val.id;
                 var view_vendor_details = "{{ route('productdetail', ':id') }}";
@@ -362,7 +417,7 @@
                         }
                     }
                 }
-                html = html + '<a href="' + view_vendor_details + '"><img alt="#" src="' + photo + '" onerror="this.onerror=null;this.src=\'' + placeholderImageSrc + '\'" class="img-fluid item-img w-100"></a></div><div class="py-2 position-relative"><div class="list-card-body position-relative"><h6 class="product-title mb-1"><a href="' + view_vendor_details + '" class="text-black">' + val.name + '</a></h6>';
+                html = html + '<a href="' + view_vendor_details + '"><img alt="#" src="' + photo + '" onerror="this.onerror=null;this.src=\'' + placeholderImageSrc + '\'" class="img-fluid item-img w-100" loading="lazy" decoding="async"></a></div><div class="py-2 position-relative"><div class="list-card-body position-relative"><h6 class="product-title mb-1"><a href="' + view_vendor_details + '" class="text-black">' + val.name + '</a></h6>';
                 html = html + '<h6 class="mb-1 popular_food_category_ pro-cat" id="popular_food_category_' + val.categoryID + '_' + val.id + '" ></h6>';
                 let final_price = priceData[val.id];
                 if (val.item_attribute && val.item_attribute.variants?.length > 0) {
@@ -399,10 +454,7 @@
                 html = html + '<div class="star position-relative mt-3"><span class="badge badge-success"><i class="feather-star"></i>' + rating + ' (' + reviewsCount + ')</span></div>';
                 html = html + '</div>';
                 html = html + '</div></div></div>';
-            });
-            html = html + '</div>';
-        }
-        return html;
+                return html;
     }
     async function getVendorDetails() {
         vendorDetailsRef.get().then(async function(vendorSnapshots) {
@@ -540,7 +592,7 @@
                 $("#vendor-gallery").html(gallery);
                 var popup_gallery = '';
                 $.each(vendorDetails.photos, function(key, value) {
-                    popup_gallery += '<a href="' + value + '"><img src="' + value + '" onerror="this.onerror=null;this.src=\'' + placeholderImageSrc + '\'"></a>';
+                    popup_gallery += '<a href="' + value + '"><img src="' + value + '" loading="lazy" onerror="this.onerror=null;this.src=\'' + placeholderImageSrc + '\'"></a>';
                 });
                 $("#popup-gallary").html(popup_gallery);
                 $('#popup-gallary').slickLightbox();
