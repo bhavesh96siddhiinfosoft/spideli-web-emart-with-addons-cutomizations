@@ -20,3 +20,5 @@ yarn-error.log
 
 # local archives
 *.zip
+serviceAccountKey.json
+commit-msg.txt

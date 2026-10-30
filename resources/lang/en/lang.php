@@ -1154,4 +1154,7 @@ return [
     'parcel_cancel_keep' => 'Keep the parcel',
     'parcel_cancel_too_late' => 'This parcel can no longer be cancelled - a driver has already accepted it.',
     'parcel_commission_line' => 'Platform commission',
+    'checkout_need_anything_else' => 'Need anything else?',
+    'checkout_add_more_items' => 'Add more items, if you want.',
+    'checkout_add_more' => 'Add more',
 ];

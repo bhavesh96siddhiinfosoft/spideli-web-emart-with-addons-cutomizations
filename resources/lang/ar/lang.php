@@ -969,4 +969,7 @@ return [
     'parcel_cancel_keep' => 'الإبقاء على الطرد',
     'parcel_cancel_too_late' => 'لم يعد بالإمكان إلغاء هذا الطرد - قبله سائق بالفعل.',
     'parcel_commission_line' => 'عمولة المنصة',
+    'checkout_need_anything_else' => 'هل تحتاج شيئاً آخر؟',
+    'checkout_add_more_items' => 'أضف المزيد من المنتجات إن أردت.',
+    'checkout_add_more' => 'أضف المزيد',
 ];

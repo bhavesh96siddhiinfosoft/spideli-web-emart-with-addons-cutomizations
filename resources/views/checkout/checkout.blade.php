@@ -156,6 +156,27 @@
                     </div>
                 </div>
                 <div class="col-md-5">
+                    <?php
+                    /* Point 77: "Need anything else? Add more" - back to the store of
+                     * this cart (multivendor and e-commerce share this checkout). The
+                     * cart stays in the session, so nothing in it is lost. */
+                    $addMoreVendorId = '';
+                    foreach ((array) (@$cart['item'] ?: []) as $cartVendorId => $cartVendorItems) {
+                        if (!empty($cartVendorId) && is_array($cartVendorItems) && count($cartVendorItems) > 0) {
+                            $addMoreVendorId = $cartVendorId;
+                            break;
+                        }
+                    }
+                    ?>
+                    <?php if ($addMoreVendorId !== '') { ?>
+                    <div class="checkout-add-more rounded shadow-sm bg-white border p-3 mb-3 d-flex align-items-center justify-content-between">
+                        <div class="mr-3">
+                            <h6 class="font-weight-bold mb-1">{{ trans('lang.checkout_need_anything_else') }}</h6>
+                            <p class="mb-0 text-muted small">{{ trans('lang.checkout_add_more_items') }}</p>
+                        </div>
+                        <a href="{{ route('vendor', $addMoreVendorId) }}" class="btn checkout-add-more-btn text-nowrap">{{ trans('lang.checkout_add_more') }}</a>
+                    </div>
+                    <?php } ?>
                     <div class="siddhi-cart-item rounded rounded shadow-sm overflow-hidden bg-white sticky_sidebar" id="cart_list">
                         @include('vendor.cart_item')
                     </div>
@@ -165,6 +186,10 @@
     </div>
     @include('layouts.footer')
     @include('layouts.nav')
+    <style>
+        .checkout-add-more-btn { border: 2px solid #1f8a3b; color: #1f8a3b; border-radius: 30px; font-weight: 700; padding: 6px 20px; background: #fff; }
+        .checkout-add-more-btn:hover, .checkout-add-more-btn:focus { background: #1f8a3b; color: #fff; text-decoration: none; }
+    </style>
     <div class="modal fade" id="exampleModalAddress" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
