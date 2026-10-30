@@ -14,7 +14,7 @@ class ApiController extends Controller
 
         /* Point 84: an app that sends the user's Firebase ID token gets the whole
          * delete - the sign-in removed (so the email can sign up again), the
-         * customer profile kept as history (isDeleted), and the rows below.
+         * customer profile removed (hard delete, as the admin), and the rows below.
          * Without the header the old behaviour stays, until the app sends it. */
         if ($request->bearerToken()) {
             return $this->deleteSignedInUser($request);
@@ -88,7 +88,7 @@ class ApiController extends Controller
         }
 
         try {
-            $accounts->markProfileDeleted($uid);
+            $accounts->deleteProfile($uid);
             $accounts->deleteSignIn($uid);
         } catch (Exception $e) {
             report($e);

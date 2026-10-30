@@ -19,10 +19,8 @@ use Illuminate\Support\Facades\Http;
  *                        this project, not expired), as the admin's
  *                        App\Finance\IdTokens checks it
  *   deleteSignIn()       Firebase Authentication accounts:delete
- *   markProfileDeleted() users/{uid} kept as history with isDeleted +
- *                        isDeletedDate - the same soft delete the admin
- *                        makes, which sign-up, login and password reset
- *                        already skip
+ *   deleteProfile()      users/{uid} removed - the same hard delete the
+ *                        admin makes since 30 Oct
  * Uses the service account in storage/app/firebase/credentials.json.
  */
 class FirebaseAccounts
@@ -82,8 +80,8 @@ class FirebaseAccounts
         throw new \RuntimeException('Firebase Authentication refused the delete (' . $res->status() . ')');
     }
 
-    /** Marks a customer's profile deleted. Returns false when there is none, it is not a customer's, or it already is. */
-    public function markProfileDeleted($uid)
+    /** Deletes a customer's profile. Returns false when there is none or it is not a customer's. */
+    public function deleteProfile($uid)
     {
         $url = 'https://firestore.googleapis.com/v1/projects/' . $this->projectId . '/databases/(default)/documents/users/' . rawurlencode($uid);
         $res = Http::withToken($this->accessToken())->timeout(15)->get($url);
@@ -91,23 +89,12 @@ class FirebaseAccounts
             return false;
         }
         $fields = (array)$res->json('fields');
-        if (($fields['role']['stringValue'] ?? '') !== 'customer' || !empty($fields['isDeleted']['booleanValue'])) {
+        if (($fields['role']['stringValue'] ?? '') !== 'customer') {
             return false;
         }
-        $update = [
-            'isDeleted' => ['booleanValue' => true],
-            'isDeletedDate' => ['timestampValue' => gmdate('Y-m-d\TH:i:s\Z')],
-            'active' => ['booleanValue' => false],
-            'fcmToken' => ['stringValue' => ''],
-        ];
-        if (array_key_exists('isActive', $fields)) {
-            $update['isActive'] = ['booleanValue' => false];
-        }
-        $mask = implode('&', array_map(function ($f) { return 'updateMask.fieldPaths=' . $f; }, array_keys($update)));
-        $patch = Http::withToken($this->accessToken())->timeout(15)
-            ->patch($url . '?' . $mask . '&currentDocument.exists=true', ['fields' => $update]);
-        if (!$patch->successful()) {
-            throw new \RuntimeException('The profile could not be marked deleted (' . $patch->status() . ')');
+        $delete = Http::withToken($this->accessToken())->timeout(15)->delete($url);
+        if (!$delete->successful()) {
+            throw new \RuntimeException('The profile could not be deleted (' . $delete->status() . ')');
         }
         return true;
     }
