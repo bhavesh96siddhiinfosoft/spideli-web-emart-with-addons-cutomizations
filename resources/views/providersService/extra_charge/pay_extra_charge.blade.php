@@ -409,6 +409,12 @@
     var extraCharge = $('#extraCharge').val();
     var orderId = $('#extraChargeId').val();
     var extraChargesCharged = JSON.parse($('#extraChargesCharged').val() || '[]');   // point 81: the charges in this amount
+    /* Point 88: this screen also pays a task job's tasks. */
+    var payingTasks = $('#extraChargeKind').val() === 'tasks';
+    var taskIdsToPay = JSON.parse($('#taskIdsToPay').val() || '[]');
+    function payWhat(opts) {
+        return payingTasks ? markTasksPaid(orderId, taskIdsToPay, opts) : markExtraChargesPaid(orderId, extraChargesCharged, opts);
+    }
     var providerId = '';
     database.collection('provider_orders').where('id', '==', orderId).get().then(async function(snapshots) {
         orderDetail = snapshots.docs[0].data();
@@ -743,7 +749,7 @@
                    with the booking when it completes (EXTRA-CHARGES-SPEC 5), so
                    no provider row here. */
                 var userRef = database.collection('users').doc(userId);
-                markExtraChargesPaid(orderId, extraChargesCharged, {
+                payWhat({
                     read: function (tx) {
                         return tx.get(userRef);
                     },
@@ -767,7 +773,7 @@
                             "serviceType": "ondemand-service",
                             "user_id": userId,
                             'transactionUser': 'customer',
-                            'note': 'Booking Extra charge debited'
+                            'note': payingTasks ? 'Booking tasks debited' : 'Booking Extra charge debited'
                         });
                         tx.update(userRef, { 'wallet_amount': balance - amount });
                     }
@@ -782,7 +788,7 @@
         }
     }
     async function updatePaymentStatus() {
-        markExtraChargesPaid(orderId, extraChargesCharged).then(function () {
+        payWhat().then(function () {
             afterExtraChargesPaid();
         }).catch(function (error) {
             alert(error.message || String(error));
@@ -791,7 +797,7 @@
     /* Event 14c: tell the provider, and the worker if one is assigned, that the
        charges are paid - as the customer app does. */
     function afterExtraChargesPaid() {
-        sendExtraChargesPaidNotification(orderId).then(function () {
+        (payingTasks ? Promise.resolve() : sendExtraChargesPaidNotification(orderId)).then(function () {
             window.location.href = "{{ route('my-bookings') }}";
         });
     }

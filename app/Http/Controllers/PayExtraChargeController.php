@@ -614,6 +614,8 @@ class PayExtraChargeController extends Controller
         $ondemand_cart_order['total_pay'] = $extra_charge_cart['extra_charge'] ?? 0;
         $ondemand_cart_order['orderId'] = $extra_charge_cart['order_id'] ?? '';
         $ondemand_cart_order['charged'] = $extra_charge_cart['charged'] ?? [];
+        $ondemand_cart_order['kind'] = $extra_charge_cart['kind'] ?? 'extra';          // point 88
+        $ondemand_cart_order['task_ids'] = $extra_charge_cart['task_ids'] ?? [];
         $ondemand_cart = Session::get('ondemand_cart', []);
         $ondemand_cart['cart_order'] = $ondemand_cart_order;
         Session::put('ondemand_cart', $ondemand_cart);

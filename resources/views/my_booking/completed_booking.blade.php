@@ -229,6 +229,7 @@
                                     <h6 class="font-weight-bold mb-2">{{ trans('lang.extra_charges') }}</h6>
                                     <div id="extra_charges"></div>
                                 </div>
+                                @include('my_booking.partials.tasks', ['wrapClass' => 'px-0'])
                             </div>
                         </div>
                     </div>
@@ -363,6 +364,7 @@
     async function getOrderDetails() {
         bookingRef.get().then(async function(bookingSnapshots) {
             var orderDetails = bookingSnapshots.docs[0].data();
+            initCustomerTasks(orderDetails);   // point 88
             serviceId = orderDetails.provider.id;
             if (orderDetails.authorID != user_uuid) {
                 window.location.href = '{{ route('login') }}';
@@ -815,3 +817,4 @@
         return html;
     }
 </script>
+@include('my_booking.partials.tasks_script')

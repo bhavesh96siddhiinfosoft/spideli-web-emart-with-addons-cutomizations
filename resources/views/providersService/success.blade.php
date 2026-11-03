@@ -150,6 +150,7 @@
                         database.collection('provider_orders').doc(id_order).set({
                             'productServiceCommissionType': psc.productServiceCommissionType,   // point 87
                             'productServiceCommissionValue': psc.productServiceCommissionValue,
+                            'hasTasks': serviceDetails.tasksEnabled === true,   // point 88: a job made of tasks
                             'address': address,
                             'adminCommission': order_json.adminCommission,
                             'adminCommissionType': order_json.adminCommissionType,

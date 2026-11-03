@@ -178,6 +178,7 @@ Route::get('services/category/{id}', [OnDemandController::class, 'servicesByCate
 Route::post('ondemand-cart', [OnDemandController::class, 'onDemandCart'])->name('ondemand-cart');
 Route::get('ondemand-checkout', [OnDemandController::class, 'onDemandCheckout'])->name('ondemand-checkout');
 Route::post('set-extra-charge', [OnDemandController::class, 'setExtraCharge'])->name('set-extra-charge');
+Route::post('set-task-charge', [OnDemandController::class, 'setTaskCharge'])->name('set-task-charge');   // point 88
 Route::get('pay-extra-charge', [OnDemandController::class, 'payExtraCharge'])->name('pay-extra-charge');
 Route::post('set-service-charge', [PayLaterServiceChargeController::class, 'setServiceCharge'])->name('set-service-charge');
 Route::get('pay-service-charge', [PayLaterServiceChargeController::class, 'payServiceCharge'])->name('pay-service-charge');

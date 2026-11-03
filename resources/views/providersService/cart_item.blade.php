@@ -10,6 +10,11 @@
     <input type="hidden" id="extraCharge" value="{{@$extra_charge_cart['extra_charge']}}">
     <input type="hidden" id="extraChargeId" value="{{@$extra_charge_cart['order_id']}}">
     <input type="hidden" id="extraChargesCharged" value="{{ json_encode(@$extra_charge_cart['charged'] ?: []) }}">
+    <input type="hidden" id="extraChargeKind" value="{{ @$extra_charge_cart['kind'] ?: 'extra' }}">
+    <input type="hidden" id="taskIdsToPay" value="{{ json_encode(@$extra_charge_cart['task_ids'] ?: []) }}">
+    @if(@$extra_charge_cart['kind'] === 'tasks')
+        <div class="bg-white px-3 pt-3"><h6 class="font-weight-bold mb-0">{{ trans('lang.tasks') }}</h6></div>
+    @endif
     <div class="bg-white p-3 clearfix btm-total">
         <h6 class="font-weight-bold mb-0">{{trans('lang.total')}}
             <p class="float-right">

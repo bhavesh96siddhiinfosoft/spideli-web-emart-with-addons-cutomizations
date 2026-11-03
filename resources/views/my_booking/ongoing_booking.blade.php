@@ -241,6 +241,7 @@
                                     </div>
                                 </div>
                             </div>
+                            @include('my_booking.partials.tasks')
                             <div class="col-md-12  mb-2 text-center pay_extra_charge_btn_div" style="display:none">
                                 <button type="button" class=" align-items-center btn btn-success" id="pay_extra_charge_btn">{{ trans('lang.pay_extra_charge') }}</button>
                             </div>
@@ -321,6 +322,7 @@
     async function getOrderDetails() {
         bookingRef.get().then(async function(bookingSnapshots) {
             var orderDetails = bookingSnapshots.docs[0].data();
+            initCustomerTasks(orderDetails);   // point 88
             if (orderDetails.authorID != user_uuid) {
                 window.location.href = '{{ route('login') }}';
             } else {
@@ -728,3 +730,4 @@
         return html;
     }
 </script>
+@include('my_booking.partials.tasks_script')

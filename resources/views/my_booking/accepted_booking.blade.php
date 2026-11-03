@@ -215,6 +215,7 @@
                                     </div>
                                 </div>
                             </div>
+                            @include('my_booking.partials.tasks')
                             <div class="col-md-12  mb-2 mt-2 text-center">
                                 <button type="button" class=" align-items-center btn btn-danger" data-toggle="modal" data-target="#cancelBookingModal" id="cancel_btn">{{ trans('lang.cancel_booking') }}</button>
                             </div>
@@ -315,6 +316,7 @@
     async function getOrderDetails() {
         bookingRef.get().then(async function(bookingSnapshots) {
             var orderDetails = bookingSnapshots.docs[0].data();
+            initCustomerTasks(orderDetails);   // point 88
             await checkCommissionModel(orderDetails.sectionId);
             if (orderDetails.authorID != user_uuid) {
                 window.location.href = '{{ route('login') }}';
@@ -755,3 +757,4 @@
         return html;
     }
 </script>
+@include('my_booking.partials.tasks_script')

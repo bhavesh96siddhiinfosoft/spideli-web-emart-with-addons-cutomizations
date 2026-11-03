@@ -5772,6 +5772,43 @@
             });
         }
 
+        /* Point 88, website only: marks the given tasks paid, in one transaction
+         * with the booking's tasksPaid (and, through opts, the wallet debit) -
+         * the same shape as markExtraChargesPaid. A task already paid, or gone,
+         * is skipped. Resolves to the amount marked paid. */
+        function markTasksPaid(bookingId, taskIds, opts) {
+            opts = opts || {};
+            var bookingRef = database.collection('provider_orders').doc(bookingId);
+            var taskRefs = (taskIds || []).map(function (taskId) { return bookingRef.collection('tasks').doc(taskId); });
+            return database.runTransaction(function (tx) {
+                return Promise.all([tx.get(bookingRef)].concat(taskRefs.map(function (r) { return tx.get(r); }))).then(function (snaps) {
+                    if (!snaps[0].exists) {
+                        throw new Error('booking not found');
+                    }
+                    return Promise.resolve(opts.read ? opts.read(tx) : null).then(function (extra) {
+                        var amount = 0;
+                        var toPay = [];
+                        taskRefs.forEach(function (ref, i) {
+                            var snap = snaps[i + 1];
+                            if (snap.exists && snap.data().paid !== true) {
+                                amount += parseFloat(snap.data().price) || 0;
+                                toPay.push(ref);
+                            }
+                        });
+                        amount = Number(amount.toFixed(2));
+                        if (opts.write) {
+                            opts.write(tx, extra, amount);
+                        }
+                        toPay.forEach(function (ref) {
+                            tx.update(ref, { paid: true, paidAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        });
+                        tx.update(bookingRef, { tasksPaid: Number(((parseFloat(snaps[0].data().tasksPaid) || 0) + amount).toFixed(2)) });
+                        return amount;
+                    });
+                });
+            });
+        }
+
         /* ---- Addresses: never print the word "null" ----------------------
          *
          * Bug report 02 point 18: *"123 Yaounde St, null, Tsinga"*.

@@ -71,10 +71,13 @@
            credited the charges with the booking when it completes
            (EXTRA-CHARGES-SPEC 5). Then event 14c to the provider and worker. */
         var extraChargesCharged = {!! json_encode(@$cart['cart_order']['charged'] ?: [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) !!};
+        /* Point 88: or the tasks it paid. */
+        var paidKind = {!! json_encode(@$cart['cart_order']['kind'] ?: 'extra') !!};
+        var paidTaskIds = {!! json_encode(@$cart['cart_order']['task_ids'] ?: [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) !!};
         async function finalCheckout() {
-            markExtraChargesPaid(id_order, extraChargesCharged).then(function () {
+            (paidKind === 'tasks' ? markTasksPaid(id_order, paidTaskIds) : markExtraChargesPaid(id_order, extraChargesCharged).then(function () {
                 return sendExtraChargesPaidNotification(id_order);
-            }).then(function () {
+            })).then(function () {
                 window.location.href = "{{route('my-bookings')}}";
             });
         }

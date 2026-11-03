@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\VendorUsers;
 use App\Support\ExtraCharges;
+use App\Support\TaskCharges;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Razorpay\Api\Api;
@@ -89,6 +90,32 @@ class OnDemandController extends Controller
         $extra_charge_cart['extra_charge'] = $owed['amount'];
         $extra_charge_cart['order_id'] = $order_id;
         $extra_charge_cart['charged'] = $owed['charged'];
+        $extra_charge_cart['kind'] = 'extra';
+        $extra_charge_cart['task_ids'] = [];
+        Session::put('extra_charge_cart', $extra_charge_cart);
+        Session::save();
+        return response()->json(['success' => true]);
+    }
+
+    /* Point 88: a task job's tasks, paid on the same screen as extra charges.
+       What is owed is read from the booking and its tasks here - per_task: the
+       tasks done and not paid; end: every unpaid task once all are done. */
+    public function setTaskCharge(Request $request)
+    {
+        $order_id = $request->get('orderId');
+        $user = Auth::check() ? VendorUsers::where('email', Auth::user()->email)->first() : null;
+        $owed = $user ? TaskCharges::owedOn($order_id, $user->uuid) : null;
+        if (!$owed || $owed['amount'] <= 0) {
+            return response()->json(['success' => false, 'message' => trans('lang.tasks_nothing_to_pay')]);
+        }
+        $extra_charge_cart = Session::get('extra_charge_cart', []);
+        $extra_charge_cart['extra_charge'] = $owed['amount'];
+        $extra_charge_cart['order_id'] = $order_id;
+        $extra_charge_cart['charged'] = [];
+        $extra_charge_cart['kind'] = 'tasks';
+        $extra_charge_cart['task_ids'] = array_values(array_map(function ($t) {
+            return $t['id'];
+        }, $owed['tasks']));
         Session::put('extra_charge_cart', $extra_charge_cart);
         Session::save();
         return response()->json(['success' => true]);
