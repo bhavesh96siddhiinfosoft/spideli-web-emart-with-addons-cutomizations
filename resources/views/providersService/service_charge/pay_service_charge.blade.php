@@ -1002,6 +1002,7 @@
                                 providerWallet = parseFloat(providerWallet) + parseFloat(providerAmount);
                                 await database.collection('users').doc(provider_id).update({'wallet_amount': providerWallet}).then(async function (result) {
                                     await creditAdminCommision();
+                                    await pscTakeHourly();
                                     await updatePaymentStatus(payment_method);
                                 })
                             })
@@ -1011,11 +1012,23 @@
                     providerWallet = parseFloat(providerWallet) - parseFloat(adminCommission)
                     await database.collection('users').doc(provider_id).update({'wallet_amount': providerWallet}).then(async function (result) {
                         await creditAdminCommision();
+                        await pscTakeHourly();
                         await updatePaymentStatus(payment_method);
                     })
                 }
             }
      }
+
+    /* Point 87: an hourly booking's price is known only now - take the Admin
+     * Product & Service Commission on what the provider is credited. */
+    function pscTakeHourly() {
+        return takeProductServiceCommission({
+            collection: 'provider_orders', orderId: orderId,
+            base: (parseFloat({{ json_encode((float) (@$service_charge_cart['sub_total'] ?? 0)) }}) || 0) - (parseFloat(discount) || 0), quantity: 1,
+            userId: provider_id, transactionUser: 'provider', serviceType: 'ondemand-service',
+            wallets: ['users/' + provider_id]
+        });
+    }
 
     async function creditAdminCommision() {
         var wId = database.collection('tmp').doc().id;

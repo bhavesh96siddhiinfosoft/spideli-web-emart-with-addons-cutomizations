@@ -146,7 +146,10 @@
                             discount = '0.0';
                         }
                         var otp = Math.floor(100000 + Math.random() * 900000);
+                        var psc = await productServiceCommissionRule(serviceDetails.author, order_json.sectionId);   // point 87
                         database.collection('provider_orders').doc(id_order).set({
+                            'productServiceCommissionType': psc.productServiceCommissionType,   // point 87
+                            'productServiceCommissionValue': psc.productServiceCommissionValue,
                             'address': address,
                             'adminCommission': order_json.adminCommission,
                             'adminCommissionType': order_json.adminCommissionType,

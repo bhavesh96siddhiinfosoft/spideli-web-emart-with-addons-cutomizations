@@ -163,7 +163,10 @@
                                 'location': location
                             };
                         }
+                        var psc = await productServiceCommissionRule(vendorDetails, order_json.section_id);   // point 87
                         database.collection('vendor_orders').doc(id_order).set({
+                            'productServiceCommissionType': psc.productServiceCommissionType,   // point 87
+                            'productServiceCommissionValue': psc.productServiceCommissionValue,
                             'address': address,
                             'author': userDetails,
                             'authorID': order_json.authorID,

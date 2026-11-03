@@ -119,7 +119,19 @@
             })
         })
 
-        function finalCheckout() {
+        /* Point 87: an hourly booking's price is known only now - take the Admin
+         * Product & Service Commission on what the provider is credited. */
+        function pscTakeHourly() {
+            return takeProductServiceCommission({
+                collection: 'provider_orders', orderId: id_order,
+                base: (parseFloat({{ json_encode((float) (@$cart['sub_total'] ?? 0)) }}) || 0) - (parseFloat(discount) || 0), quantity: 1,
+                userId: providerId, transactionUser: 'provider', serviceType: 'ondemand-service',
+                wallets: ['users/' + providerId]
+            });
+        }
+
+        async function finalCheckout() {
+            await pscTakeHourly();
             userDetailsRef.get().then(async function (userSnapshots) {
                 var userDetails = userSnapshots.docs[0].data();
                 database.collection('provider_orders').doc(id_order).update({

@@ -1107,7 +1107,7 @@
                                 address_country: '',
                                 currencyData: currencyData
                             },
-                            success: function(data) {
+                            success: async function(data) {
                                 data = JSON.parse(data);
                                 $('#service_cart_list').html(data.html);
                                 loadcurrencynew();
@@ -1139,7 +1139,10 @@
                                 'location': location
                             };
                         }
+                        var psc = await productServiceCommissionRule(serviceDetails.author, section_id);   // point 87
                         database.collection('provider_orders').doc(id_order).set({
+                            'productServiceCommissionType': psc.productServiceCommissionType,   // point 87
+                            'productServiceCommissionValue': psc.productServiceCommissionValue,
                             'address': address,
                             'adminCommission': adminCommission,
                             'adminCommissionType': adminCommissionType,
