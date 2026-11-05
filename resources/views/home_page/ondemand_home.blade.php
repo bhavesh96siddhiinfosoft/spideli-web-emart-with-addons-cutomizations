@@ -90,6 +90,7 @@
             <h6 class="text">{{ trans('lang.zone_error_text') }}</h6>
         </div>
     </div>
+    @include('home_page.partials.bottom_banners')
     @include('layouts.footer')
     <link rel="stylesheet" href="{{ asset('css/dist/zuck.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/dist/skins/snapssenger.css') }}">
@@ -166,6 +167,8 @@
                     }
                     position1_banners.push(object);
                 }
+                // banners at the bottom of the page (bottom, bottom_up / left / right / down)
+                homeBottomBannerCollect(bannerData);
                 if (bannerData.position == 'middle') {
                     if (bannerData.hasOwnProperty('redirect_type')) {
                         redirect_type = bannerData.redirect_type;

@@ -192,6 +192,7 @@
         </section>
     </div>
 </div>
+@include('home_page.partials.bottom_banners')
 @include('layouts.footer')
 
 <script src="https://unpkg.com/geofirestore@5.2.0/dist/geofirestore.js"></script>
@@ -305,6 +306,8 @@
                 });
             }
 
+            // banners at the bottom of the page (bottom, bottom_up / left / right / down)
+            homeBottomBannerCollect(bannerData, redirect_type, redirect_id);
             if (bannerData.position == 'middle') {
                 position2_banners.push({
                     photo: bannerData.web_banner,
