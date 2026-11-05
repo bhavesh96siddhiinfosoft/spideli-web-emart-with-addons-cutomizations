@@ -2,9 +2,9 @@
     Banners at the bottom of a service's home page (admin "Banner position"):
       bottom        - full width (point 86)
       bottom_up     - full width, the upper slot          (5 Nov)
-      bottom_left   - left half  } side by side           (5 Nov)
-      bottom_right  - right half }                        (5 Nov)
       bottom_down   - full width, the lowest slot         (5 Nov)
+    Bottom Left / Bottom Right are for the app only: the website does not show
+    them (the user, 5 Nov).
     Each slot is a slider when it has several banners and is hidden when it has
     none. The home page calls homeBottomBannerCollect(bannerData, type, id) for
     each banner it shows (after its own region / zone checks); the slots are drawn
@@ -13,24 +13,18 @@
 <div class="container home-bottom-banners mt-4 mb-4" id="home_bottom_banners" style="display:none">
     <div class="home-bottom-slot mb-3" id="bottom_banner_slot" style="display:none"><div id="bottom_banner"></div></div>
     <div class="home-bottom-slot mb-3" id="bottom_up_banner_slot" style="display:none"><div id="bottom_up_banner"></div></div>
-    <div class="row">
-        <div class="col-md-6 home-bottom-slot mb-3" id="bottom_left_banner_slot" style="display:none"><div id="bottom_left_banner"></div></div>
-        <div class="col-md-6 home-bottom-slot mb-3" id="bottom_right_banner_slot" style="display:none"><div id="bottom_right_banner"></div></div>
-    </div>
     <div class="home-bottom-slot mb-3" id="bottom_down_banner_slot" style="display:none"><div id="bottom_down_banner"></div></div>
 </div>
 <style>
-    /* Kept to a banner's height, whatever the picture's size: full-width slots
-       up to 320px tall, the two half slots up to 260px. */
+    /* Kept to a banner's height, whatever the picture's size. */
     .home-bottom-banners .banner-img img { width: 100%; height: 320px; border-radius: 10px; object-fit: cover; display: block; }
-    .home-bottom-banners .col-md-6 .banner-img img { height: 260px; }
     @media (max-width: 767px) {
-        .home-bottom-banners .banner-img img, .home-bottom-banners .col-md-6 .banner-img img { height: 180px; }
+        .home-bottom-banners .banner-img img { height: 180px; }
     }
     .home-bottom-banners .slick-dots { position: static; }
 </style>
 <script>
-    var HOME_BOTTOM_SLOTS = ['bottom', 'bottom_up', 'bottom_left', 'bottom_right', 'bottom_down'];
+    var HOME_BOTTOM_SLOTS = ['bottom', 'bottom_up', 'bottom_down'];   // left / right: app only
     var homeBottomBanners = [];
     var homeBottomBannerTimer = null;
 
