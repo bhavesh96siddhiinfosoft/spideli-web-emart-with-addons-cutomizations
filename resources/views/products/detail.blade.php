@@ -116,6 +116,7 @@
     .product-addons .addon-row-name { font-size: 14px; font-weight: 600; color: #222; line-height: 1.3; }
     .product-addons .addon-row-price { font-size: 12px; color: #777; margin-top: 2px; }
     .product-addons .addon-row-subtotal { font-size: 14px; font-weight: 600; color: #222; white-space: nowrap; }
+    .product-addons .addon-row-subtotal .addon-row-calc { font-weight: 400; color: #777; }
     .product-addons .addon-stepper { flex: 0 0 auto; }
     .addtocart-summary { border: 1px solid #ececec; border-radius: 8px; padding: 12px 14px; background: #fafafa; }
     .addtocart-summary-line { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: #555; margin-bottom: 6px; }
@@ -968,7 +969,12 @@
             var qty = parseInt($(this).find('.addon-qty').val(), 10) || 0;
             var unit = parseFloat($(this).attr('data-price')) || 0;
             $(this).toggleClass('is-selected', qty > 0);
-            $(this).find('.addon-row-subtotal').text(qty > 0 ? getProductFormattedPrice(unit * qty) : '');
+            /* "1 × ₹80.50 = ₹80.50": the working in grey, the line total in bold. */
+            var $sub = $(this).find('.addon-row-subtotal').empty();
+            if (qty > 0) {
+                $sub.append($('<span class="addon-row-calc"></span>').text(qty + ' × ' + getProductFormattedPrice(unit) + ' = '))
+                    .append($('<span></span>').text(getProductFormattedPrice(unit * qty)));
+            }
         });
         var quantity = parseInt($('input[name="quantity_' + id + '"]').val() || 0) || 0;
         var unit = productUnitPriceNow(id, quantity);
