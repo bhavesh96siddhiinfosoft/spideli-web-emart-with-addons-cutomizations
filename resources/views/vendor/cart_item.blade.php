@@ -128,28 +128,35 @@ foreach ($cart['item'] as $key => $value_vendor) {
                 if ($cartLineAddons !== null) { ?>
                     <input type="hidden" id="addons_json_<?php echo @$key1; ?>" value="<?php echo htmlspecialchars(json_encode($cartLineAddons), ENT_QUOTES); ?>">
                 <?php }
+                /* The add-ons are shown full width under the product row (see
+                 * the end of this item), not squeezed into this half column. */
+                ob_start();
                 if ($cartLineAddons || $cartLegacyNames) { ?>
                 <div class="line-addons cart-line-addons">
-                    <div class="line-addons-head"><span>{{ trans('lang.cart_addons') }}</span><span><?php echo $cartMoney(\App\Support\OrderLineAddons::total($value_item)); ?></span></div>
+                    <div class="cart-addons-head"><span>{{ trans('lang.cart_addons') }}</span><span><?php echo $cartMoney(\App\Support\OrderLineAddons::total($value_item)); ?></span></div>
                     <?php if ($cartLineAddons) { foreach ($cartLineAddons as $cartAddon) { ?>
-                    <div class="line-addon">
-                        <span class="line-addon-qty">&times;<?php echo (int)$cartAddon['quantity']; ?></span>
-                        <span class="line-addon-name"><?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>
-                            <small><?php echo (int)$cartAddon['quantity']; ?> &times; <?php echo $cartMoney($cartAddon['price']); ?> = <?php echo $cartMoney($cartAddon['price'] * $cartAddon['quantity']); ?></small>
-                        </span>
-                        <span class="line-addon-sub cart-addon-stepper">
-                            <button type="button" class="btn btn-sm btn-outline-secondary cart-addon-step" data-step="-1" data-id="<?php echo $key1; ?>" data-vendor="<?php echo $key; ?>" data-name="<?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>" data-qty="<?php echo (int)$cartAddon['quantity']; ?>"><i class="feather-minus"></i></button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary cart-addon-step" data-step="1" data-id="<?php echo $key1; ?>" data-vendor="<?php echo $key; ?>" data-name="<?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>" data-qty="<?php echo (int)$cartAddon['quantity']; ?>"><i class="feather-plus"></i></button>
+                    <div class="cart-addon">
+                        <div class="cart-addon-text">
+                            <div class="cart-addon-name"><?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?></div>
+                            <div class="cart-addon-calc"><?php echo (int)$cartAddon['quantity']; ?> &times; <?php echo $cartMoney($cartAddon['price']); ?> = <strong><?php echo $cartMoney($cartAddon['price'] * $cartAddon['quantity']); ?></strong></div>
+                        </div>
+                        <span class="cart-addon-stepper">
+                            <button type="button" class="cart-addon-step" data-step="-1" data-id="<?php echo $key1; ?>" data-vendor="<?php echo $key; ?>" data-name="<?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>" data-qty="<?php echo (int)$cartAddon['quantity']; ?>"><i class="feather-minus"></i></button>
+                            <span class="cart-addon-count"><?php echo (int)$cartAddon['quantity']; ?></span>
+                            <button type="button" class="cart-addon-step" data-step="1" data-id="<?php echo $key1; ?>" data-vendor="<?php echo $key; ?>" data-name="<?php echo htmlspecialchars($cartAddon['name'], ENT_QUOTES); ?>" data-qty="<?php echo (int)$cartAddon['quantity']; ?>"><i class="feather-plus"></i></button>
                         </span>
                     </div>
                     <?php } } else { foreach ($cartLegacyNames as $legacyName) { ?>
-                    <div class="line-addon">
-                        <span class="line-addon-qty">&times;<?php echo (int)$value_item['quantity']; ?></span>
-                        <span class="line-addon-name"><?php echo htmlspecialchars($legacyName, ENT_QUOTES); ?></span>
+                    <div class="cart-addon">
+                        <div class="cart-addon-text">
+                            <div class="cart-addon-name"><?php echo htmlspecialchars($legacyName, ENT_QUOTES); ?></div>
+                        </div>
+                        <span class="cart-addon-stepper"><span class="cart-addon-count">&times;<?php echo (int)$value_item['quantity']; ?></span></span>
                     </div>
                     <?php } } ?>
                 </div>
-                <?php } ?>
+                <?php }
+                $cartAddonsBlock = ob_get_clean(); ?>
                 <input type="hidden" id="extras_price_<?php echo @$key1; ?>" value="<?php echo @$value_item['extra_price']; ?>">
                 <input type="hidden" id="vegs_<?php echo @$key1; ?>" value="<?php echo @$value_item['veg']; ?>">
                 <?php
@@ -229,6 +236,10 @@ foreach ($cart['item'] as $key => $value_vendor) {
 
         <div class="close remove_item col-md-1" data-vendor="<?php echo $key; ?>" data-vendor-id="<?php echo @$cart['vendor']['id']; ?>" data-id="<?php echo $key1; ?>"><i class="fa fa-times"></i></div>
 
+        <?php if ($cartAddonsBlock !== '') { ?>
+        <div class="col-12 cart-addons-col"><?php echo $cartAddonsBlock; ?></div>
+        <?php } ?>
+
     </div>
 
     <?php $total_price = $total_price + $totalItemPrice; ?>
@@ -240,6 +251,29 @@ foreach ($cart['item'] as $key => $value_vendor) {
     <?php } ?>
 
     <?php $total_item_price = $total_price; ?>
+
+<style>
+    /* Point 68: the cart's add-ons, as cards like the product page. */
+    .cart-addons-col { padding: 6px 12px 4px; }
+    .cart-line-addons { margin: 0; font-size: 13px; }
+    .cart-line-addons .cart-addons-head { display: flex; justify-content: space-between; align-items: center;
+        font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #777;
+        border-top: 1px dashed #e2e2e2; padding-top: 8px; margin-bottom: 6px; }
+    .cart-line-addons .cart-addons-head span:last-child { color: #222; font-size: 13px; letter-spacing: 0; }
+    .cart-line-addons .cart-addon { display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin-bottom: 6px;
+        border: 1px solid #ececec; border-radius: 8px; background: #fafafa; }
+    .cart-line-addons .cart-addon-text { flex: 1 1 auto; min-width: 0; }
+    .cart-line-addons .cart-addon-name { font-weight: 600; color: #222; line-height: 1.3; }
+    .cart-line-addons .cart-addon-calc { font-size: 12px; color: #777; margin-top: 1px; }
+    .cart-line-addons .cart-addon-calc strong { color: #222; font-weight: 600; }
+    .cart-line-addons .cart-addon-stepper { display: inline-flex; align-items: center; flex: 0 0 auto;
+        border: 1px solid #dcdcdc; border-radius: 6px; background: #fff; overflow: hidden; }
+    .cart-line-addons .cart-addon-step { width: 28px; height: 28px; border: 0; background: transparent; color: #555;
+        display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+    .cart-line-addons .cart-addon-step:hover { background: #f3f3f3; }
+    .cart-line-addons .cart-addon-step:disabled { opacity: .5; cursor: default; }
+    .cart-line-addons .cart-addon-count { min-width: 24px; text-align: center; font-weight: 600; color: #ff683a; padding: 0 2px; }
+</style>
 
 </div>
 
