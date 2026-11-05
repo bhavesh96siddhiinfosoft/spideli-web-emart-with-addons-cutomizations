@@ -16,6 +16,7 @@ use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
 use App\Helpers\FirestoreHelper;
 use App\Services\ParcelPricing;
+use App\Services\TrafficPricing;
 
 class ParcelController extends Controller
 {
@@ -267,7 +268,22 @@ class ParcelController extends Controller
             $sectionId !== '' ? (FirestoreHelper::getDocument('sections/' . $sectionId) ?: null) : null
         );
 
+        /* Point 103: the busy multiplier for the pickup point, now, and the
+         * trip time with traffic from Google - asked only when a price per
+         * minute is set somewhere, so Google is not called for nothing. */
+        $trafficSettings = TrafficPricing::settingsFor($region ?: null, 'parcel');
+        $multiplier = TrafficPricing::multiplierNow($region ?: null, 'parcel',
+            $cart['sender_address_lat'] ?? null, $cart['sender_address_lng'] ?? null);
+        $minutes = null;
+        if ($this->parcelHasPerMinute($region ?: null, $carriers, $details['regionId'])) {
+            $minutes = TrafficPricing::tripMinutes($cart['sender_address_lat'] ?? null, $cart['sender_address_lng'] ?? null,
+                $cart['receiver_address_lat'] ?? null, $cart['receiver_address_lng'] ?? null);
+        }
+
         return ParcelPricing::quotes([
+            'minutes' => $minutes,
+            'multiplier' => $multiplier,
+            'trafficSettings' => $trafficSettings,
             'commission' => $commission,
             'regionId' => $details['regionId'],
             'scope' => $details['scope'],
@@ -279,6 +295,21 @@ class ParcelController extends Controller
             'deliveryMethod' => $details['deliveryMethod'],
             'currency' => $cart['currencyData']['code'] ?? '',
         ], $region, $carriers, $bands);
+    }
+
+    /* Point 103: whether the region or a carrier there charges per minute. */
+    private function parcelHasPerMinute(?array $region, array $carriers, string $regionId): bool
+    {
+        if ((ParcelPricing::num($region['parcelPricing']['perMinuteCharge'] ?? null) ?? 0) > 0) {
+            return true;
+        }
+        foreach ($carriers as $carrier) {
+            if ((ParcelPricing::num($carrier['regionPricing'][$regionId]['perMinuteCharge'] ?? null) ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /* Makes one quote the cart's price. subTotal stays the BASE price, as in
@@ -325,6 +356,11 @@ class ParcelController extends Controller
             'origin' => $details['origin'] ?? null,
             'destination' => $details['destination'] ?? null,
         ];
+        /* Point 103: how the carriage price was reached - only when a price
+           per minute or the region's traffic pricing is in play. */
+        if (!empty($quote['trafficPricing'])) {
+            $cart['parcelOrderFields']['trafficPricing'] = $quote['trafficPricing'];
+        }
 
         return $cart;
     }

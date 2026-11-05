@@ -197,6 +197,10 @@
                             "platformFee": platformCharge,
                             "platformTax": platformTax,
                             "packagingChargeEnable": packagingChargeEnable,
+                            /* Point 103: how the delivery charge was reached (time with traffic,
+                               busy multiplier) - only when it applied and there is a delivery. */
+                            ...((parseFloat(order_json.deliveryCharge) > 0 && {!! json_encode($cart['deliveryTrafficPricing'] ?? null) !!})
+                                ? { 'trafficPricing': {!! json_encode($cart['deliveryTrafficPricing'] ?? null) !!} } : {}),
                         }).then(function (result) {
                             $.ajax({
                                 type: 'POST',

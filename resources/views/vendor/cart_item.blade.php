@@ -522,6 +522,9 @@ foreach ($cart['item'] as $key => $value_vendor) {
                 echo $cart['distanceType']; ?>) <?php } ?> </span>
             <?php }?>
         </p>
+        @if($item_count && $total_price && @$cart['deliverycharge'])
+            @include('partials.traffic_pricing_note', ['trafficPricing' => $cart['deliveryTrafficPricing'] ?? null])
+        @endif
 
         
         @if(!empty($tip_amount))

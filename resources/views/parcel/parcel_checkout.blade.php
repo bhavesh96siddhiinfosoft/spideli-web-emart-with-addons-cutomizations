@@ -277,6 +277,7 @@ session_start();
                                     {{ formatCurrency($parcel_cart['parcelDeliveryCharge'], $parcel_cart['currencyData']) }}
                                 </span>
                             </div>
+                            @include('partials.traffic_pricing_note', ['trafficPricing' => $parcel_cart['parcelOrderFields']['trafficPricing'] ?? null])
                             <div class="payment-total d-flex">
                                 <?php
                                 $discount = 0;

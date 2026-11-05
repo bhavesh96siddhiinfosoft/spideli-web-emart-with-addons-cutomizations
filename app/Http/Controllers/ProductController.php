@@ -1275,6 +1275,9 @@ class ProductController extends Controller
 
     public function recalculateCartDeliveryCharge(&$cart)
     {
+        /* Point 103: set again below only when traffic pricing applies. */
+        unset($cart['deliveryTrafficPricing']);
+
         $address_lat = @$_COOKIE['address_lat'];
         $address_lng = @$_COOKIE['address_lng'];
         $vendor_latitude = $cart['vendor_latitude'] ?? @$_COOKIE['vendor_latitude'];
@@ -1337,6 +1340,16 @@ class ProductController extends Controller
                             $cart['deliverychargemain'] = round(($kmradius * $delivery_charges_per_km), 2);
                         }
                         $cart['deliverykm'] = $kmradius;
+
+                        /* Point 103: the time part and the busy multiplier, on
+                           the region's charge only - a store's own charge (the
+                           admin's settings carry vendor_can_modify, a store's
+                           own do not) stays as it is. */
+                        if (property_exists($deliveryChargemain, 'vendor_can_modify')) {
+                            [$cart['deliverychargemain'], $cart['deliveryTrafficPricing']] = \App\Services\TrafficPricing::forDelivery(
+                                (float) $cart['deliverychargemain'], (float) $kmradius, (string) $distanceType, $delivery_charges_per_km,
+                                (string) ($cart['vendor']['id'] ?? ''), $vendor_latitude, $vendor_longitude, $address_lat, $address_lng);
+                        }
                     }
                 }
             }

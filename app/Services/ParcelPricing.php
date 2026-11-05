@@ -198,7 +198,9 @@ class ParcelPricing
      *  default (Spideli drivers) first when it is offered.
      *
      *  $ctx: regionId, scope, km, weightKg (nullable), dimensions (nullable),
-     *        selectedBandId, pickupMethod, deliveryMethod, currency (code). */
+     *        selectedBandId, pickupMethod, deliveryMethod, currency (code),
+     *        minutes (point 103: the trip time with traffic, or null) and
+     *        multiplier (point 103: [multiplier, reason], see TrafficPricing). */
     /**
      * The commission added on top of a delivery company's parcel price, or
      * null. All three must be on (client + app developer, 14 Oct):
@@ -232,6 +234,16 @@ class ParcelPricing
         $pickupMethod = in_array($ctx['pickupMethod'] ?? '', self::METHODS, true) ? $ctx['pickupMethod'] : 'home';
         $deliveryMethod = in_array($ctx['deliveryMethod'] ?? '', self::METHODS, true) ? $ctx['deliveryMethod'] : 'home';
         $regionPricing = is_array($region['parcelPricing'] ?? null) ? $region['parcelPricing'] : null;
+
+        /* Point 103: the time part and the busy multiplier, on the carriage
+         * price only - (distance + minutes x price per minute) x multiplier.
+         * The weight charge, the options and the fixed charges are as before.
+         * No minutes and no multiplier = exactly the old price. */
+        $minutes = self::num($ctx['minutes'] ?? null);
+        $traffic = is_array($ctx['multiplier'] ?? null) ? $ctx['multiplier'] : [1.0, null];
+        $multiplier = max(1.0, (float) ($traffic[0] ?? 1));
+        $traffic = [$multiplier, $multiplier > 1 ? ($traffic[1] ?? null) : null];
+        $trafficApplies = !empty($ctx['trafficSettings']);
 
         $selected = null;
         foreach ($bands as $band) {
@@ -305,8 +317,9 @@ class ParcelPricing
             $band = self::effectiveBand($bands, $selected, $weights['chargeableKg']);
             if ($band) {
                 $rate = self::num($band['delivery_charge'] ?? null) ?? 0.0;
+                $perMinute = max(0.0, self::num($regionPricing['perMinuteCharge'] ?? null) ?? 0.0);
                 /* round() to whole units, exactly as the website always has. */
-                $price = (float) round($km * $rate);
+                $price = (float) round(TrafficPricing::apply($km * $rate, $minutes, $perMinute, $multiplier));
                 $out[] = array_merge([
                     'key' => self::DEFAULT_KEY,
                     'type' => 'default',
@@ -314,7 +327,10 @@ class ParcelPricing
                     'carrierName' => null,
                     'photo' => '',
                     'eta' => null,
-                ], $build(null, $price, 'default', $weights, $divisor, $band));
+                ], $build(null, $price, 'default', $weights, $divisor, $band), [
+                    'trafficPricing' => TrafficPricing::matters($perMinute, $trafficApplies ? [] : null)
+                        ? TrafficPricing::block($km, $minutes, $rate, $perMinute, $traffic, $price) : null,
+                ]);
             }
         }
 
@@ -337,6 +353,8 @@ class ParcelPricing
             $perKm = self::num($prices['perKmCharge'] ?? null) ?? 0.0;
             $perKg = self::num($prices['perKgCharge'] ?? null) ?? 0.0;
             $minimum = self::num($prices['minimumCharge'] ?? null) ?? 0.0;
+            /* Point 103: the carrier's own for this region, else the region's. */
+            $perMinute = max(0.0, self::pick($row, $regionPricing, 'perMinuteCharge'));
 
             /* A carrier with no price at all would quote 0 - leave it out
              * rather than offer free delivery by accident. */
@@ -344,7 +362,10 @@ class ParcelPricing
                 continue;
             }
 
-            $price = round(max($base + $perKm * $km + $perKg * $weights['chargeableKg'], $minimum), 2);
+            /* (base + distance + time) x multiplier, then the weight charge;
+             * the minimum applies to the whole, as before. */
+            $carriage = TrafficPricing::apply($base + $perKm * $km, $minutes, $perMinute, $multiplier);
+            $price = round(max($carriage + $perKg * $weights['chargeableKg'], $minimum), 2);
             $band = self::effectiveBand($bands, $selected, $weights['chargeableKg']);
 
             $carrierQuotes[] = array_merge([
@@ -360,7 +381,10 @@ class ParcelPricing
                     'max' => self::num($carrier['maxDeliveryTime'] ?? null),
                     'unit' => ($carrier['deliveryTimeUnit'] ?? 'hours') === 'days' ? 'days' : 'hours',
                 ],
-            ], $build($row, $price, 'rate_card', $weights, $divisor, $band));
+            ], $build($row, $price, 'rate_card', $weights, $divisor, $band), [
+                'trafficPricing' => TrafficPricing::matters($perMinute, $trafficApplies ? [] : null)
+                    ? TrafficPricing::block($km, $minutes, $perKm, $perMinute, $traffic, $price) : null,
+            ]);
         }
 
         usort($carrierQuotes, function ($a, $b) {
