@@ -107,6 +107,27 @@
         </div>
     </div>
 </div>
+<style>
+    /* Point 68: add-ons and the total before adding to the cart. */
+    .product-addons .addon-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px;
+        border: 1px solid #ececec; border-radius: 8px; background: #fff; transition: border-color .15s, background .15s; }
+    .product-addons .addon-row.is-selected { border-color: #ff683a; background: #fff8f5; }
+    .product-addons .addon-row-text { flex: 1 1 auto; min-width: 0; }
+    .product-addons .addon-row-name { font-size: 14px; font-weight: 600; color: #222; line-height: 1.3; }
+    .product-addons .addon-row-price { font-size: 12px; color: #777; margin-top: 2px; }
+    .product-addons .addon-row-subtotal { font-size: 14px; font-weight: 600; color: #222; white-space: nowrap; }
+    .product-addons .addon-stepper { flex: 0 0 auto; }
+    .addtocart-summary { border: 1px solid #ececec; border-radius: 8px; padding: 12px 14px; background: #fafafa; }
+    .addtocart-summary-line { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: #555; margin-bottom: 6px; }
+    .addtocart-summary-line small { color: #888; }
+    .addtocart-summary-total { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; margin-top: 4px;
+        border-top: 1px dashed #ddd; font-size: 17px; font-weight: 700; color: #222; }
+    @media (max-width: 575px) {
+        .product-addons .addon-row { flex-wrap: wrap; }
+        .product-addons .addon-row-text { flex-basis: 100%; }
+        .product-addons .addon-row-subtotal { margin-right: auto; }
+    }
+</style>
 @include('layouts.footer')
 
 <script src="{{ asset('js/geofirestore.js') }}"></script>
@@ -946,12 +967,17 @@
         $('#addons_' + id + ' .addon-row').each(function () {
             var qty = parseInt($(this).find('.addon-qty').val(), 10) || 0;
             var unit = parseFloat($(this).attr('data-price')) || 0;
-            $(this).find('.addon-row-subtotal').text(qty > 0
-                ? qty + ' \u00d7 ' + getProductFormattedPrice(unit) + ' = ' + getProductFormattedPrice(unit * qty) : '');
+            $(this).toggleClass('is-selected', qty > 0);
+            $(this).find('.addon-row-subtotal').text(qty > 0 ? getProductFormattedPrice(unit * qty) : '');
         });
         var quantity = parseInt($('input[name="quantity_' + id + '"]').val() || 0) || 0;
-        var total = productUnitPriceNow(id, quantity) * quantity + addonsSubtotal(id);
-        $('#addtocart_total_' + id).text(getProductFormattedPrice(total));
+        var unit = productUnitPriceNow(id, quantity);
+        var addons = addonsSubtotal(id);
+        $('#addtocart_item_qty_' + id).text(quantity + ' \u00d7 ' + getProductFormattedPrice(unit));
+        $('#addtocart_item_amount_' + id).text(getProductFormattedPrice(unit * quantity));
+        $('#addtocart_addons_amount_' + id).text(getProductFormattedPrice(addons));
+        $('#addtocart_addons_line_' + id).toggle(addons > 0);
+        $('#addtocart_total_' + id).text(getProductFormattedPrice(unit * quantity + addons));
     }
 
     /* Not inside .quantity: siddhi.js steps every .quantity input, and the
@@ -1793,7 +1819,7 @@
                 }
                 var prefill = cartAddonQuantities(vendorProduct.id);
 
-                html = html + '<div class="addons mt-2 mb-3" id="addons_' + vendorProduct.id + '">';
+                html = html + '<div class="addons product-addons mt-2 mb-3" id="addons_' + vendorProduct.id + '">';
                 html += '<h3 class="font-weight-bold">{{trans('lang.addons')}}</h3>';
 
                 vendorProduct.addOnsPrice.forEach((product_price, index) => {
@@ -1817,11 +1843,11 @@
                     }
                     var startQty = prefill[title.toLowerCase()] || 0;
 
-                    html += '<div class="addon-row d-flex align-items-center border-bottom py-2" data-name="' + lineAddonEscape(title) + '" data-price="' + FINAL_ADDON_PRICE + '">';
-                    html += '<div class="addon-row-text mr-2"><div class="addon-row-name">' + lineAddonEscape(title) + '</div>';
-                    html += '<small class="text-muted">' + getProductFormattedPrice(FINAL_ADDON_PRICE) + ' {{ trans('lang.addon_each') }}</small>';
-                    html += '<small class="addon-row-subtotal d-block"></small></div>';
-                    html += '<span class="count-number ml-auto addon-stepper">';
+                    html += '<div class="addon-row" data-name="' + lineAddonEscape(title) + '" data-price="' + FINAL_ADDON_PRICE + '">';
+                    html += '<div class="addon-row-text"><div class="addon-row-name">' + lineAddonEscape(title) + '</div>';
+                    html += '<div class="addon-row-price">+' + getProductFormattedPrice(FINAL_ADDON_PRICE) + ' {{ trans('lang.addon_each') }}</div></div>';
+                    html += '<span class="addon-row-subtotal"></span>';
+                    html += '<span class="count-number addon-stepper">';
                     html += '<button type="button" class="btn-sm btn btn-outline-secondary addon-dec"><i class="feather-minus"></i></button>';
                     html += '<input class="count-number-input addon-qty" type="text" inputmode="numeric" value="' + startQty + '">';
                     html += '<button type="button" class="btn-sm btn btn-outline-secondary addon-inc"><i class="feather-plus"></i></button>';
@@ -1904,9 +1930,14 @@
                 html += '<div class="product-wholesale mb-2" id="wholesale_note_' + vendorProduct.id + '"></div>';
             }
 
+            /* Point 68: product unit x quantity + each add-on's own subtotal,
+             * shown line by line above the buttons. */
+            html += '<div class="addtocart-summary mt-2">';
+            html += '<div class="addtocart-summary-line"><span>' + lineAddonEscape(vendorProduct.name) + ' <small id="addtocart_item_qty_' + vendorProduct.id + '"></small></span><span id="addtocart_item_amount_' + vendorProduct.id + '"></span></div>';
+            html += '<div class="addtocart-summary-line" id="addtocart_addons_line_' + vendorProduct.id + '" style="display:none"><span>{{ trans('lang.addons') }}</span><span id="addtocart_addons_amount_' + vendorProduct.id + '"></span></div>';
+            html += '<div class="addtocart-summary-total"><span>{{ trans('lang.addtocart_total') }}</span><span id="addtocart_total_' + vendorProduct.id + '"></span></div>';
+            html += '</div>';
             html = html + '<div class="addtocart mt-2 mb-3">';
-            /* Point 68: product unit x quantity + each add-on's own subtotal. */
-            html += '<div class="addtocart-total d-flex justify-content-between font-weight-bold mb-2"><span>{{ trans('lang.addtocart_total') }}</span><span id="addtocart_total_' + vendorProduct.id + '"></span></div>';
             html += "<button data-id='" + String(vendorProduct.id) + "' type='button' class='add-to-cart btn btn-primary btn-lg btn-block' >{{trans('lang.add_to_cart')}}</button>";
             html += '<input type="hidden" name="name_' + vendorProduct.id + '" id="name_' + vendorProduct.id + '" value="' + vendorProduct.name + '">';
             html += '<input type="hidden" id="price_' + vendorProduct.id + '" name="price_' + vendorProduct.id + '" value="' + main_price + '">';
@@ -2165,6 +2196,7 @@
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').html(pro_price);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vid', variant_id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vprice', variant_price);
+                refreshAddToCartTotal(vendorProduct.id);   // the total follows the chosen size / type
                 /* This variant's own wholesale price, so the add-to-cart
                  * handler sends the tier that actually applies to it. */
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vwprice',
@@ -2251,6 +2283,7 @@
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').html(pro_price);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vid', variant_id);
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vprice', variant_price);
+                refreshAddToCartTotal(vendorProduct.id);   // the total follows the chosen size / type
                 /* This variant's own wholesale price, so the add-to-cart
                  * handler sends the tier that actually applies to it. */
                 $('#variation_info_' + vendorProduct.id).find('#variant_price').attr('data-vwprice',
