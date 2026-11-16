@@ -218,6 +218,15 @@ class TransactionController extends Controller
                         ], 500);
                     }
                 }
+            } else if ($user_wallet['data']['payment_method'] == 'mycoolpay') {
+                // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
+                try {
+                    return redirect()->away(\App\Services\MyCoolPay::start('wallet', $user_wallet['data']['amount'], $user_wallet['data']['currencyData']['code'] ?? '', 'Spideli wallet top-up',
+                        ['name' => $user_wallet['data']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('wallet-success'), route('transactions')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('transactions')->with('error', $e->getMessage());
+                }
             } else if ($user_wallet['data']['payment_method'] == 'midtrans') {
                 $midtrans_enable = $user_wallet['data']['midtrans_enable'];
                 $midtrans_serverKey = $user_wallet['data']['midtrans_serverKey'];
@@ -494,6 +503,16 @@ class TransactionController extends Controller
             $midtrans_payment = Session::get('midtrans_payment_token');
             if ($midtrans_payment === $_GET['midtrans_token']) {
                 $user_wallet['transaction_id'] = $midtrans_payment;
+                $user_wallet['payment_status'] = true;
+                Session::put('user_wallet', $user_wallet);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mycoolpay_token'])) {
+            $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'wallet');   // #92: proven with MyCoolPay
+            if ($mycoolpay_paid) {
+                $user_wallet['transaction_id'] = $mycoolpay_paid['transactionRef'];
                 $user_wallet['payment_status'] = true;
                 Session::put('user_wallet', $user_wallet);
                 Session::put('success', 'Payment successful');

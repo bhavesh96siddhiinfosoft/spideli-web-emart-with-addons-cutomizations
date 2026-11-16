@@ -221,6 +221,10 @@ session_start();
                                         <option value="orangepay" style="display: none;" id="orangepay_box">
                                             {{trans('lang.orangepay')}}
                                         </option>
+                                        {{-- #92 MyCoolPay: shown by showMyCoolPayOption() (layouts/footer) --}}
+                                        <option value="mycoolpay" style="display: none;" id="mycoolpay_box">
+                                            {{trans('lang.mycoolpay')}}
+                                        </option>
                                         <option value="wallet" style="display: none;" id="wallet_box">
                                             {{trans('lang.wallet')}}
                                         </option>
@@ -1654,7 +1658,7 @@ session_start();
                     }
                 });
 
-            } else if (payment_method == "orangepay") {
+            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay")) {
 
                 var orangepay_enable = $("#orangepay_enable").val();
                 var orangepay_isSandbox = $("#orangepay_isSandbox").val();

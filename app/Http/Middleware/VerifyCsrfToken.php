@@ -12,5 +12,7 @@ class VerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
+        // #92: MyCoolPay posts its payment notices here (checked by IP and MD5 signature instead).
+        'mycoolpay/callback/*',
     ];
 }

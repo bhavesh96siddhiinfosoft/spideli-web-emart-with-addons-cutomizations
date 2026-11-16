@@ -250,6 +250,15 @@ class PayExtraChargeController extends Controller
                         ], 500);
                     }
                 }
+            } else if ($ondemand_cart['cart_order']['payment_method'] == 'mycoolpay') {
+                // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
+                try {
+                    return redirect()->away(\App\Services\MyCoolPay::start('extra_charge', $ondemand_cart['cart_order']['total_pay'], $ondemand_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli extra charge',
+                        ['name' => $ondemand_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('extra-pay-success'), route('extra-pay-failed')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('extra-pay-failed')->with('error', $e->getMessage());
+                }
             } else if($ondemand_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $ondemand_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $ondemand_cart['cart_order']['midtrans_serverKey'];
@@ -509,6 +518,15 @@ class PayExtraChargeController extends Controller
         if (isset($_GET['midtrans_token'])) {
             $midtrans_payment = Session::get('midtrans_payment_token');
             if ($midtrans_payment === $_GET['midtrans_token']) {
+                $ondemand_cart['paymentStatus'] = true;
+                Session::put('ondemand_cart', $ondemand_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mycoolpay_token'])) {
+            $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'extra_charge');   // #92: proven with MyCoolPay
+            if ($mycoolpay_paid) {
                 $ondemand_cart['paymentStatus'] = true;
                 Session::put('ondemand_cart', $ondemand_cart);
                 Session::put('success', 'Payment successful');

@@ -780,6 +780,15 @@ class ParcelController extends Controller
                         ], 500);
                     }
                 }
+            } else if ($parcel_cart['cart_order']['payment_method'] == 'mycoolpay') {
+                // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
+                try {
+                    return redirect()->away(\App\Services\MyCoolPay::start('parcel', $parcel_cart['cart_order']['total_pay'], $parcel_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli parcel',
+                        ['name' => $parcel_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('parcel_success'), route('parcel_checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('parcel_checkout')->with('error', $e->getMessage());
+                }
             } else if($parcel_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $parcel_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $parcel_cart['cart_order']['midtrans_serverKey'];
@@ -1059,6 +1068,15 @@ class ParcelController extends Controller
         if (isset($_GET['midtrans_token'])) {
             $midtrans_payment = Session::get('midtrans_payment_token');
             if ($midtrans_payment === $_GET['midtrans_token']) {
+                $parcel_cart['payment_status'] = true;
+                Session::put('parcel_cart', $parcel_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mycoolpay_token'])) {
+            $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'parcel');   // #92: proven with MyCoolPay
+            if ($mycoolpay_paid) {
                 $parcel_cart['payment_status'] = true;
                 Session::put('parcel_cart', $parcel_cart);
                 Session::put('success', 'Payment successful');

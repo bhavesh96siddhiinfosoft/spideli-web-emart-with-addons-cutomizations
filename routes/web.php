@@ -26,6 +26,7 @@ use App\Http\Controllers\RentalController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SendEmailController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\MyCoolPayController;
 use App\Http\Controllers\TrendingController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\PayLaterServiceChargeController;
@@ -120,6 +121,9 @@ Route::post('process-stripe', [CheckoutController::class, 'processStripePayment'
 Route::post('process-paypal', [CheckoutController::class, 'processPaypalPayment'])->name('process-paypal');
 Route::post('razorpaypayment', [CheckoutController::class, 'razorpaypayment'])->name('razorpaypayment');
 Route::get('success', [CheckoutController::class, 'success'])->name('success');
+// #92 MyCoolPay: the links set in the MyCoolPay merchant space (see App\Services\MyCoolPay).
+Route::get('mycoolpay/return/{result}', [MyCoolPayController::class, 'back'])->where('result', 'success|cancel|failure')->name('mycoolpay.return');
+Route::post('mycoolpay/callback/{token}', [MyCoolPayController::class, 'callback'])->where('token', '[a-f0-9]{40}')->name('mycoolpay.callback');
 Route::get('failed', [CheckoutController::class, 'failed'])->name('failed');
 Route::get('notify', [CheckoutController::class, 'notify'])->name('notify');
 Route::get('transactions', [TransactionController::class, 'index'])->name('transactions');

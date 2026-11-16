@@ -141,6 +141,11 @@
                                     <input type="hidden" id="orangepay_merchantKey">
                                     <input type="hidden" id="orangepay_enable">
                                 </div>
+                                {{-- #92 MyCoolPay: shown by showMyCoolPayOption() (layouts/footer) --}}
+                                <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="mycoolpay_box">
+                                    <input type="radio" name="payment_method" id="mycoolpay" value="mycoolpay" class="custom-control-input">
+                                    <label class="custom-control-label" for="mycoolpay">{{ trans('lang.mycoolpay') }}</label>
+                                </div>
                                 <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="wallet_box">
                                     <input type="radio" name="payment_method" disabled id="wallet" value="wallet" class="custom-control-input">
                                     <label class="custom-control-label" for="wallet">{{ trans('lang.wallet_available') }}
@@ -1519,7 +1524,7 @@
                                     window.location.href = "<?php echo route('pay'); ?>";
                                 }
                             });
-                        } else if (payment_method == "orangepay") {
+                        } else if ((payment_method == "orangepay" || payment_method == "mycoolpay")) {
                             var orangepay_enable = $("#orangepay_enable").val();
                             var orangepay_isSandbox = $("#orangepay_isSandbox").val();
                             var orangepay_clientId = $("#orangepay_clientId").val();

@@ -171,6 +171,11 @@
                                 <input type="hidden" id="orangepay_returnUrl">
                                 <input type="hidden" id="orangepay_enable">
                             </div>
+                            {{-- #92 MyCoolPay: shown by showMyCoolPayOption() (layouts/footer) --}}
+                            <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="mycoolpay_box">
+                                <input type="radio" name="payment_method" id="mycoolpay" value="mycoolpay" class="custom-control-input">
+                                <label class="custom-control-label" for="mycoolpay">{{ trans('lang.mycoolpay') }}</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -477,7 +482,7 @@
                 midtrans_image: $("#midtrans_image").val(),
                 midtrans_isSandbox: $("#midtrans_isSandbox").val()
             });
-        } else if (paymentMethod === "orangepay") {
+        } else if (paymentMethod === "orangepay" || paymentMethod === "mycoolpay") {
             Object.assign(ajaxData, {
                 orangepay_enable: $("#orangepay_enable").val(),
                 orangepay_auth: $("#orangepay_auth").val(),

@@ -194,6 +194,15 @@ class RentalController extends Controller
                 Session::save();
             }
         }
+        if (isset($_GET['mycoolpay_token'])) {
+            $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'rental');   // #92: proven with MyCoolPay
+            if ($mycoolpay_paid) {
+                $rentalCarsData['payment_status'] = true;
+                Session::put('rentalCarsData', $rentalCarsData);
+                Session::put('success', 'Your payment was successful');
+                Session::save();
+            }
+        }
         if (isset($_GET['orangepay_token'])) {
             $orangepay_token = Session::get('orangepay_payment_token');
             if ($orangepay_token === $_GET['orangepay_token']) {
@@ -491,6 +500,15 @@ class RentalController extends Controller
                             'error' => $e->getFullError(),
                         ], 500);
                     }
+                }
+            } else if ($rentalCarsData['cart_order']['payment_method'] == 'mycoolpay') {
+                // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
+                try {
+                    return redirect()->away(\App\Services\MyCoolPay::start('rental', $rentalCarsData['cart_order']['total_pay'], $rentalCarsData['cart_order']['currencyData']['code'] ?? '', 'Spideli rental',
+                        ['name' => $rentalCarsData['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('rental_success'), route('rental_cars_checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('rental_cars_checkout')->with('error', $e->getMessage());
                 }
             } else if($rentalCarsData['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $rentalCarsData['cart_order']['midtrans_enable'];

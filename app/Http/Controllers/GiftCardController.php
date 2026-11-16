@@ -277,6 +277,15 @@ class GiftCardController extends Controller
                         ], 500);
                     }
                 }
+            } else if ($cart['gift_cart_order']['payment_method'] == 'mycoolpay') {
+                // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
+                try {
+                    return redirect()->away(\App\Services\MyCoolPay::start('giftcard', $cart['gift_cart_order']['total_pay'], $cart['gift_cart_order']['currencyData']['code'] ?? '', 'Spideli gift card',
+                        ['name' => $cart['gift_cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('giftcard.success'), route('customize.giftcard')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('customize.giftcard')->with('error', $e->getMessage());
+                }
             } else if($cart['gift_cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $cart['gift_cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $cart['gift_cart_order']['midtrans_serverKey'];
@@ -533,6 +542,15 @@ class GiftCardController extends Controller
         if (isset($_GET['midtrans_token'])) {
             $midtrans_payment = Session::get('midtrans_payment_token');
             if ($midtrans_payment === $_GET['midtrans_token']) {
+                $cart['payment_status'] = true;
+                Session::put('gift_cart', $cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mycoolpay_token'])) {
+            $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'giftcard');   // #92: proven with MyCoolPay
+            if ($mycoolpay_paid) {
                 $cart['payment_status'] = true;
                 Session::put('gift_cart', $cart);
                 Session::put('success', 'Payment successful');

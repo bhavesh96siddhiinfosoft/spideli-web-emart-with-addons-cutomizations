@@ -279,6 +279,15 @@ class CheckoutController extends Controller
                     }
                 }
 
+            } else if ($cart['cart_order']['payment_method'] == 'mycoolpay') {
+                // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
+                try {
+                    return redirect()->away(\App\Services\MyCoolPay::start('checkout', $cart['cart_order']['total_pay'], $cart['cart_order']['currencyData']['code'] ?? '', 'Spideli order',
+                        ['name' => $cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('success'), route('checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('checkout')->with('error', $e->getMessage());
+                }
             } else if($cart['cart_order']['payment_method']=='midtrans'){
 
                 $midtrans_enable = $cart['cart_order']['midtrans_enable'];
@@ -722,6 +731,16 @@ class CheckoutController extends Controller
             
             $midtrans_payment = Session::get('midtrans_payment_token');
             if ($midtrans_payment === $_GET['midtrans_token']) {
+                $cart['payment_status'] = true;
+                Session::put('cart', $cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mycoolpay_token'])) {
+            
+            $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'checkout');   // #92: proven with MyCoolPay
+            if ($mycoolpay_paid) {
                 $cart['payment_status'] = true;
                 Session::put('cart', $cart);
                 Session::put('success', 'Payment successful');

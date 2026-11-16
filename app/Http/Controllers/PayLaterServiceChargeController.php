@@ -412,6 +412,15 @@ class PayLaterServiceChargeController extends Controller
                         ], 500);
                     }
                 }
+            } else if ($service_charge_cart['cart_order']['payment_method'] == 'mycoolpay') {
+                // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
+                try {
+                    return redirect()->away(\App\Services\MyCoolPay::start('service_charge', $service_charge_cart['cart_order']['total_pay'], $service_charge_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli service charge',
+                        ['name' => $service_charge_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('service-charge-success'), route('service-charge-failed')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('service-charge-failed')->with('error', $e->getMessage());
+                }
             } else if($service_charge_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $service_charge_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $service_charge_cart['cart_order']['midtrans_serverKey'];
@@ -671,6 +680,15 @@ class PayLaterServiceChargeController extends Controller
         if (isset($_GET['midtrans_token'])) {
             $midtrans_payment = Session::get('midtrans_payment_token');
             if ($midtrans_payment === $_GET['midtrans_token']) {
+                $service_charge_cart['paymentStatus'] = true;
+                Session::put('service_charge_cart', $service_charge_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mycoolpay_token'])) {
+            $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'service_charge');   // #92: proven with MyCoolPay
+            if ($mycoolpay_paid) {
                 $service_charge_cart['paymentStatus'] = true;
                 Session::put('service_charge_cart', $service_charge_cart);
                 Session::put('success', 'Payment successful');

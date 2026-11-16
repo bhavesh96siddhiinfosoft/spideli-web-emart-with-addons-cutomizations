@@ -3274,8 +3274,28 @@
         'mercadopago_box': 'MercadoPago',
         'xendit_box': 'xendit_settings',
         'midtrans_box': 'midtrans_settings',
-        'orangepay_box': 'orange_money_settings'
+        'orangepay_box': 'orange_money_settings',
+        'mycoolpay_box': 'mycoolpay_settings'
     };
+
+    /* #92: MyCoolPay. Every payment screen has a hidden #mycoolpay_box; it is
+     * shown when settings/mycoolpay_settings is enabled with a public key.
+     * enforcePaymentMethodRegions() removes it outside its regions. The
+     * private key is never read here (it is not in settings/). */
+    function showMyCoolPayOption() {
+        if (!document.getElementById('mycoolpay_box')) {
+            return;
+        }
+        database.collection('settings').doc('mycoolpay_settings').get().then(function (doc) {
+            var d = doc.exists ? doc.data() : null;
+            if (d && (d.isEnabled === true || d.enable === true) && d.publicKey) {
+                $('#mycoolpay_box').show();
+            }
+        }).catch(function (e) {
+            console.error('MyCoolPay settings could not be read', e);
+        });
+    }
+    $(document).ready(showMyCoolPayOption);
 
     async function enforcePaymentMethodRegions() {
         var ids = Object.keys(PAYMENT_METHOD_SETTINGS).filter(function (id) {
