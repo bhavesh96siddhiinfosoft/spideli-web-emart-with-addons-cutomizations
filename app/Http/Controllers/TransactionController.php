@@ -227,6 +227,15 @@ class TransactionController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('transactions')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($user_wallet['data']['payment_method'] == 'mypvit') {
+                // #92: MyPVIT (App\Services\MyPVit); the secret key and password stay on the server.
+                try {
+                    return redirect()->away(\App\Services\MyPVit::start('wallet', $user_wallet['data']['amount'], $user_wallet['data']['currencyData']['code'] ?? '', 'Spideli wallet top-up',
+                        ['name' => $user_wallet['data']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('wallet-success'), route('transactions')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('transactions')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if ($user_wallet['data']['payment_method'] == 'midtrans') {
                 $midtrans_enable = $user_wallet['data']['midtrans_enable'];
                 $midtrans_serverKey = $user_wallet['data']['midtrans_serverKey'];
@@ -513,6 +522,16 @@ class TransactionController extends Controller
             $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'wallet');   // #92: proven with MyCoolPay
             if ($mycoolpay_paid) {
                 $user_wallet['transaction_id'] = $mycoolpay_paid['transactionRef'];
+                $user_wallet['payment_status'] = true;
+                Session::put('user_wallet', $user_wallet);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mypvit_token'])) {
+            $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'wallet');   // #92: proven with PVit's status API
+            if ($mypvit_paid) {
+                $user_wallet['transaction_id'] = $mypvit_paid['reference'];
                 $user_wallet['payment_status'] = true;
                 Session::put('user_wallet', $user_wallet);
                 Session::put('success', 'Payment successful');

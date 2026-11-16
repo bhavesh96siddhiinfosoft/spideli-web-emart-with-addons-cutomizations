@@ -286,6 +286,15 @@ class GiftCardController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('customize.giftcard')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($cart['gift_cart_order']['payment_method'] == 'mypvit') {
+                // #92: MyPVIT (App\Services\MyPVit); the secret key and password stay on the server.
+                try {
+                    return redirect()->away(\App\Services\MyPVit::start('giftcard', $cart['gift_cart_order']['total_pay'], $cart['gift_cart_order']['currencyData']['code'] ?? '', 'Spideli gift card',
+                        ['name' => $cart['gift_cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('giftcard.success'), route('customize.giftcard')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('customize.giftcard')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($cart['gift_cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $cart['gift_cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $cart['gift_cart_order']['midtrans_serverKey'];
@@ -551,6 +560,15 @@ class GiftCardController extends Controller
         if (isset($_GET['mycoolpay_token'])) {
             $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'giftcard');   // #92: proven with MyCoolPay
             if ($mycoolpay_paid) {
+                $cart['payment_status'] = true;
+                Session::put('gift_cart', $cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mypvit_token'])) {
+            $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'giftcard');   // #92: proven with PVit's status API
+            if ($mypvit_paid) {
                 $cart['payment_status'] = true;
                 Session::put('gift_cart', $cart);
                 Session::put('success', 'Payment successful');

@@ -288,6 +288,15 @@ class CheckoutController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('checkout')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($cart['cart_order']['payment_method'] == 'mypvit') {
+                // #92: MyPVIT (App\Services\MyPVit); the secret key and password stay on the server.
+                try {
+                    return redirect()->away(\App\Services\MyPVit::start('checkout', $cart['cart_order']['total_pay'], $cart['cart_order']['currencyData']['code'] ?? '', 'Spideli order',
+                        ['name' => $cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('success'), route('checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('checkout')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($cart['cart_order']['payment_method']=='midtrans'){
 
                 $midtrans_enable = $cart['cart_order']['midtrans_enable'];
@@ -741,6 +750,16 @@ class CheckoutController extends Controller
             
             $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'checkout');   // #92: proven with MyCoolPay
             if ($mycoolpay_paid) {
+                $cart['payment_status'] = true;
+                Session::put('cart', $cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mypvit_token'])) {
+            
+            $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'checkout');   // #92: proven with PVit's status API
+            if ($mypvit_paid) {
                 $cart['payment_status'] = true;
                 Session::put('cart', $cart);
                 Session::put('success', 'Payment successful');

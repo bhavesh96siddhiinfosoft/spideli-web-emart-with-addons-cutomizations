@@ -421,6 +421,15 @@ class PayLaterServiceChargeController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('service-charge-failed')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($service_charge_cart['cart_order']['payment_method'] == 'mypvit') {
+                // #92: MyPVIT (App\Services\MyPVit); the secret key and password stay on the server.
+                try {
+                    return redirect()->away(\App\Services\MyPVit::start('service_charge', $service_charge_cart['cart_order']['total_pay'], $service_charge_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli service charge',
+                        ['name' => $service_charge_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('service-charge-success'), route('service-charge-failed')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('service-charge-failed')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($service_charge_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $service_charge_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $service_charge_cart['cart_order']['midtrans_serverKey'];
@@ -689,6 +698,15 @@ class PayLaterServiceChargeController extends Controller
         if (isset($_GET['mycoolpay_token'])) {
             $mycoolpay_paid = \App\Services\MyCoolPay::confirmed($_GET['mycoolpay_token'], 'service_charge');   // #92: proven with MyCoolPay
             if ($mycoolpay_paid) {
+                $service_charge_cart['paymentStatus'] = true;
+                Session::put('service_charge_cart', $service_charge_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['mypvit_token'])) {
+            $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'service_charge');   // #92: proven with PVit's status API
+            if ($mypvit_paid) {
                 $service_charge_cart['paymentStatus'] = true;
                 Session::put('service_charge_cart', $service_charge_cart);
                 Session::put('success', 'Payment successful');

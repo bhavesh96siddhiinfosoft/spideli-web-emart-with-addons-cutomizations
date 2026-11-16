@@ -68,6 +68,8 @@ if (@$rentalCarsData['decimal_degits']) {
                         <option value="orangepay" style="display: none;" id="orangepay_box">{{trans('lang.orangepay')}}</option>
                         {{-- #92 MyCoolPay: shown by showMyCoolPayOption() (layouts/footer) --}}
                         <option value="mycoolpay" style="display: none;" id="mycoolpay_box">{{trans('lang.mycoolpay')}}</option>
+                        {{-- #92 MyPVIT: shown by showMyPVitOption() (layouts/footer) --}}
+                        <option value="mypvit" style="display: none;" id="mypvit_box">{{trans('lang.mypvit')}}</option>
                         <option value="wallet" style="display: none;" id="wallet_box"></option>
                     </select>
                     <input type="hidden" id="isEnabled">

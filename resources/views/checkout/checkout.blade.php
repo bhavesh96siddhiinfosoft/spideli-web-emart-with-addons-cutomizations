@@ -146,6 +146,11 @@
                                     <input type="radio" name="payment_method" id="mycoolpay" value="mycoolpay" class="custom-control-input">
                                     <label class="custom-control-label" for="mycoolpay">{{ trans('lang.mycoolpay') }}</label>
                                 </div>
+                                {{-- #92 MyPVIT: shown by showMyPVitOption() (layouts/footer) --}}
+                                <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="mypvit_box">
+                                    <input type="radio" name="payment_method" id="mypvit" value="mypvit" class="custom-control-input">
+                                    <label class="custom-control-label" for="mypvit">{{ trans('lang.mypvit') }}</label>
+                                </div>
                                 <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="wallet_box">
                                     <input type="radio" name="payment_method" disabled id="wallet" value="wallet" class="custom-control-input">
                                     <label class="custom-control-label" for="wallet">{{ trans('lang.wallet_available') }}
@@ -1524,7 +1529,7 @@
                                     window.location.href = "<?php echo route('pay'); ?>";
                                 }
                             });
-                        } else if ((payment_method == "orangepay" || payment_method == "mycoolpay")) {
+                        } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit")) {
                             var orangepay_enable = $("#orangepay_enable").val();
                             var orangepay_isSandbox = $("#orangepay_isSandbox").val();
                             var orangepay_clientId = $("#orangepay_clientId").val();

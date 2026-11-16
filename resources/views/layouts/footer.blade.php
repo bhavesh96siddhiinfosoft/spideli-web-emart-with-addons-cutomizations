@@ -3275,7 +3275,8 @@
         'xendit_box': 'xendit_settings',
         'midtrans_box': 'midtrans_settings',
         'orangepay_box': 'orange_money_settings',
-        'mycoolpay_box': 'mycoolpay_settings'
+        'mycoolpay_box': 'mycoolpay_settings',
+        'mypvit_box': 'mypvit_settings'
     };
 
     /* #92: MyCoolPay. Every payment screen has a hidden #mycoolpay_box; it is
@@ -3311,6 +3312,34 @@
         });
     }
     $(document).ready(showMyCoolPayOption);
+
+    /* #92: MyPVIT (PVit), on the same rules: enabled, set up, and a region
+     * paying in XAF. The secret key and password are only used on the server. */
+    function showMyPVitOption() {
+        if (!document.getElementById('mypvit_box')) {
+            return;
+        }
+        database.collection('settings').doc('mypvit_settings').get().then(async function (doc) {
+            var d = doc.exists ? doc.data() : null;
+            if (!(d && (d.isEnabled === true || d.enable === true) && d.accountCode && d.linkCode && d.callbackCode)) {
+                return;
+            }
+            try {
+                var cur = await getRegionCurrency();
+                var code = cur && cur.code ? String(cur.code).toUpperCase() : '';
+                if (code !== '' && code !== 'XAF') {
+                    $('#mypvit_box').remove();
+                    return;
+                }
+            } catch (e) {
+                console.error('MyPVIT: region currency unknown', e);
+            }
+            $('#mypvit_box').show();
+        }).catch(function (e) {
+            console.error('MyPVIT settings could not be read', e);
+        });
+    }
+    $(document).ready(showMyPVitOption);
 
     /* #92: why a MyCoolPay payment did not start or was not accepted. */
     @if (session('mycoolpay_error'))

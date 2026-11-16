@@ -225,6 +225,10 @@ session_start();
                                         <option value="mycoolpay" style="display: none;" id="mycoolpay_box">
                                             {{trans('lang.mycoolpay')}}
                                         </option>
+                                        {{-- #92 MyPVIT: shown by showMyPVitOption() (layouts/footer) --}}
+                                        <option value="mypvit" style="display: none;" id="mypvit_box">
+                                            {{trans('lang.mypvit')}}
+                                        </option>
                                         <option value="wallet" style="display: none;" id="wallet_box">
                                             {{trans('lang.wallet')}}
                                         </option>
@@ -1658,7 +1662,7 @@ session_start();
                     }
                 });
 
-            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay")) {
+            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit")) {
 
                 var orangepay_enable = $("#orangepay_enable").val();
                 var orangepay_isSandbox = $("#orangepay_isSandbox").val();

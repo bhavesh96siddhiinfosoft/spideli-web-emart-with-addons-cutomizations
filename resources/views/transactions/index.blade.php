@@ -176,6 +176,11 @@
                                 <input type="radio" name="payment_method" id="mycoolpay" value="mycoolpay" class="custom-control-input">
                                 <label class="custom-control-label" for="mycoolpay">{{ trans('lang.mycoolpay') }}</label>
                             </div>
+                            {{-- #92 MyPVIT: shown by showMyPVitOption() (layouts/footer) --}}
+                            <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="mypvit_box">
+                                <input type="radio" name="payment_method" id="mypvit" value="mypvit" class="custom-control-input">
+                                <label class="custom-control-label" for="mypvit">{{ trans('lang.mypvit') }}</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -482,7 +487,7 @@
                 midtrans_image: $("#midtrans_image").val(),
                 midtrans_isSandbox: $("#midtrans_isSandbox").val()
             });
-        } else if (paymentMethod === "orangepay" || paymentMethod === "mycoolpay") {
+        } else if (paymentMethod === "orangepay" || paymentMethod === "mycoolpay" || paymentMethod === "mypvit") {
             Object.assign(ajaxData, {
                 orangepay_enable: $("#orangepay_enable").val(),
                 orangepay_auth: $("#orangepay_auth").val(),

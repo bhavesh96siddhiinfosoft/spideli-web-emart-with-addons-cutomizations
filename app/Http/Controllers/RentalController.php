@@ -203,6 +203,15 @@ class RentalController extends Controller
                 Session::save();
             }
         }
+        if (isset($_GET['mypvit_token'])) {
+            $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'rental');   // #92: proven with PVit's status API
+            if ($mypvit_paid) {
+                $rentalCarsData['payment_status'] = true;
+                Session::put('rentalCarsData', $rentalCarsData);
+                Session::put('success', 'Your payment was successful');
+                Session::save();
+            }
+        }
         if (isset($_GET['orangepay_token'])) {
             $orangepay_token = Session::get('orangepay_payment_token');
             if ($orangepay_token === $_GET['orangepay_token']) {
@@ -505,6 +514,15 @@ class RentalController extends Controller
                 // #92: MyCoolPay (App\Services\MyCoolPay); the private key stays on the server.
                 try {
                     return redirect()->away(\App\Services\MyCoolPay::start('rental', $rentalCarsData['cart_order']['total_pay'], $rentalCarsData['cart_order']['currencyData']['code'] ?? '', 'Spideli rental',
+                        ['name' => $rentalCarsData['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('rental_success'), route('rental_cars_checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('rental_cars_checkout')->with('mycoolpay_error', $e->getMessage());
+                }
+} else if ($rentalCarsData['cart_order']['payment_method'] == 'mypvit') {
+                // #92: MyPVIT (App\Services\MyPVit); the secret key and password stay on the server.
+                try {
+                    return redirect()->away(\App\Services\MyPVit::start('rental', $rentalCarsData['cart_order']['total_pay'], $rentalCarsData['cart_order']['currencyData']['code'] ?? '', 'Spideli rental',
                         ['name' => $rentalCarsData['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('rental_success'), route('rental_cars_checkout')));
                 } catch (\Throwable $e) {
