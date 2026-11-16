@@ -22,6 +22,16 @@ class MyCoolPayController extends Controller
 
     public function back($result)
     {
+        /* A payment started by the store or provider panel: MyCoolPay copied
+         * that panel's return address (spd_back) onto this URL. Forward the
+         * customer there, only to a /mycoolpay/return page on this domain. */
+        $back = (string)request()->query('spd_back', '');
+        if ($back !== '') {
+            if (self::panelReturnAllowed($back)) {
+                return redirect(rtrim($back, '/') . '/' . $result);
+            }
+            abort(404);
+        }
         $p = Session::get(MyCoolPay::SESSION);
         if (!$p) {
             // Another device or an expired session: nothing to confirm here.
@@ -61,6 +71,19 @@ class MyCoolPayController extends Controller
         Session::forget(MyCoolPay::SESSION);
         Session::save();
         return redirect($p['failUrl'] ?: '/')->with('mycoolpay_error', $message);
+    }
+
+    /** https, on spideli.com or one of its subdomains (or this site's own host), path ending /mycoolpay/return. */
+    public static function panelReturnAllowed($url)
+    {
+        $u = parse_url($url);
+        if (!$u || empty($u['host']) || !in_array(strtolower($u['scheme'] ?? ''), ['https', 'http'], true) || isset($u['user']) || isset($u['query']) || isset($u['fragment'])) {
+            return false;
+        }
+        $host = strtolower($u['host']);
+        $own = strtolower((string)parse_url(url('/'), PHP_URL_HOST));
+        $sameSite = $host === $own || $host === 'spideli.com' || substr($host, -strlen('.spideli.com')) === '.spideli.com';
+        return $sameSite && preg_match('#/mycoolpay/return/?$#', (string)($u['path'] ?? '')) === 1;
     }
 
     public function callback(Request $request, $token)
