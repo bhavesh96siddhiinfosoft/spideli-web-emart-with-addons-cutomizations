@@ -3286,16 +3286,38 @@
         if (!document.getElementById('mycoolpay_box')) {
             return;
         }
-        database.collection('settings').doc('mycoolpay_settings').get().then(function (doc) {
+        database.collection('settings').doc('mycoolpay_settings').get().then(async function (doc) {
             var d = doc.exists ? doc.data() : null;
-            if (d && (d.isEnabled === true || d.enable === true) && d.publicKey) {
-                $('#mycoolpay_box').show();
+            if (!(d && (d.isEnabled === true || d.enable === true) && d.publicKey)) {
+                return;
             }
+            /* MyCoolPay takes XAF only (and EUR when the admin allows it): a
+             * region paying in another currency (e.g. INR) never sees it. An
+             * unknown currency shows it; the server refuses with a message. */
+            var allowed = String(d.currency || 'XAF').toUpperCase() === 'EUR' ? ['XAF', 'EUR'] : ['XAF'];
+            try {
+                var cur = await getRegionCurrency();
+                var code = cur && cur.code ? String(cur.code).toUpperCase() : '';
+                if (code !== '' && allowed.indexOf(code) === -1) {
+                    $('#mycoolpay_box').remove();
+                    return;
+                }
+            } catch (e) {
+                console.error('MyCoolPay: region currency unknown', e);
+            }
+            $('#mycoolpay_box').show();
         }).catch(function (e) {
             console.error('MyCoolPay settings could not be read', e);
         });
     }
     $(document).ready(showMyCoolPayOption);
+
+    /* #92: why a MyCoolPay payment did not start or was not accepted. */
+    @if (session('mycoolpay_error'))
+    $(document).ready(function () {
+        Swal.fire({icon: 'error', text: {!! json_encode((string)session('mycoolpay_error')) !!}});
+    });
+    @endif
 
     async function enforcePaymentMethodRegions() {
         var ids = Object.keys(PAYMENT_METHOD_SETTINGS).filter(function (id) {

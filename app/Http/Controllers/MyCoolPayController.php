@@ -25,7 +25,7 @@ class MyCoolPayController extends Controller
         $p = Session::get(MyCoolPay::SESSION);
         if (!$p) {
             // Another device or an expired session: nothing to confirm here.
-            return redirect('/')->with('error', trans('lang.mycoolpay_no_pending'));
+            return redirect('/')->with('mycoolpay_error', trans('lang.mycoolpay_no_pending'));
         }
         $status = MyCoolPay::checkStatus($p['transactionRef']);
         $state = strtoupper((string)($status['transaction_status'] ?? ''));
@@ -60,7 +60,7 @@ class MyCoolPayController extends Controller
         }
         Session::forget(MyCoolPay::SESSION);
         Session::save();
-        return redirect($p['failUrl'] ?: '/')->with('error', $message);
+        return redirect($p['failUrl'] ?: '/')->with('mycoolpay_error', $message);
     }
 
     public function callback(Request $request, $token)

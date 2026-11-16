@@ -787,7 +787,7 @@ class ParcelController extends Controller
                         ['name' => $parcel_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('parcel_success'), route('parcel_checkout')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('parcel_checkout')->with('error', $e->getMessage());
+                    return redirect()->route('parcel_checkout')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if($parcel_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $parcel_cart['cart_order']['midtrans_enable'];

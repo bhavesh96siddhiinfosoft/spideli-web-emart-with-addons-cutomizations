@@ -286,7 +286,7 @@ class CheckoutController extends Controller
                         ['name' => $cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('success'), route('checkout')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('checkout')->with('error', $e->getMessage());
+                    return redirect()->route('checkout')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if($cart['cart_order']['payment_method']=='midtrans'){
 

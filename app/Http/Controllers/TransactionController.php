@@ -225,7 +225,7 @@ class TransactionController extends Controller
                         ['name' => $user_wallet['data']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('wallet-success'), route('transactions')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('transactions')->with('error', $e->getMessage());
+                    return redirect()->route('transactions')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if ($user_wallet['data']['payment_method'] == 'midtrans') {
                 $midtrans_enable = $user_wallet['data']['midtrans_enable'];

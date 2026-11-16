@@ -257,7 +257,7 @@ class PayExtraChargeController extends Controller
                         ['name' => $ondemand_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('extra-pay-success'), route('extra-pay-failed')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('extra-pay-failed')->with('error', $e->getMessage());
+                    return redirect()->route('extra-pay-failed')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if($ondemand_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $ondemand_cart['cart_order']['midtrans_enable'];

@@ -419,7 +419,7 @@ class PayLaterServiceChargeController extends Controller
                         ['name' => $service_charge_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('service-charge-success'), route('service-charge-failed')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('service-charge-failed')->with('error', $e->getMessage());
+                    return redirect()->route('service-charge-failed')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if($service_charge_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $service_charge_cart['cart_order']['midtrans_enable'];

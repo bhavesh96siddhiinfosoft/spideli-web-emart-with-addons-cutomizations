@@ -284,7 +284,7 @@ class GiftCardController extends Controller
                         ['name' => $cart['gift_cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('giftcard.success'), route('customize.giftcard')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('customize.giftcard')->with('error', $e->getMessage());
+                    return redirect()->route('customize.giftcard')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if($cart['gift_cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $cart['gift_cart_order']['midtrans_enable'];

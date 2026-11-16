@@ -508,7 +508,7 @@ class RentalController extends Controller
                         ['name' => $rentalCarsData['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('rental_success'), route('rental_cars_checkout')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('rental_cars_checkout')->with('error', $e->getMessage());
+                    return redirect()->route('rental_cars_checkout')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if($rentalCarsData['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $rentalCarsData['cart_order']['midtrans_enable'];

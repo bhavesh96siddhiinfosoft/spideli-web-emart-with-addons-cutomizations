@@ -269,7 +269,7 @@ class OnDemandCheckoutController extends Controller
                         ['name' => $ondemand_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
                         route('ondemand-success'), route('ondemand-checkout')));
                 } catch (\Throwable $e) {
-                    return redirect()->route('ondemand-checkout')->with('error', $e->getMessage());
+                    return redirect()->route('ondemand-checkout')->with('mycoolpay_error', $e->getMessage());
                 }
             } else if($ondemand_cart['cart_order']['payment_method']=='midtrans'){
 
