@@ -30,6 +30,7 @@ use App\Http\Controllers\MyCoolPayController;
 use App\Http\Controllers\MyPVitController;
 use App\Http\Controllers\SebpayController;
 use App\Http\Controllers\PiSpiController;
+use App\Http\Controllers\FinanceTopupController;
 use App\Http\Controllers\TrendingController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\PayLaterServiceChargeController;
@@ -140,6 +141,10 @@ Route::get('pispi/pay', [PiSpiController::class, 'pay'])->name('pispi.pay');
 Route::post('pispi/request', [PiSpiController::class, 'request'])->middleware('throttle:20,1')->name('pispi.request');
 Route::get('pispi/status', [PiSpiController::class, 'status'])->middleware('throttle:60,1')->name('pispi.status');
 Route::get('pispi/cancel', [PiSpiController::class, 'cancel'])->name('pispi.cancel');
+// Finance F14: a Spideli Finance top-up opened from the app, paid with the client's gateways (no Finance screen here)
+Route::get('finance/topup/{id}', [FinanceTopupController::class, 'start'])->where('id', '[A-Za-z0-9_-]{8,64}')->middleware('throttle:30,1')->name('finance.topup.start');
+Route::get('finance/topup/{id}/done', [FinanceTopupController::class, 'done'])->where('id', '[A-Za-z0-9_-]{8,64}')->name('finance.topup.done');
+Route::get('finance/topup/{id}/failed', [FinanceTopupController::class, 'failed'])->where('id', '[A-Za-z0-9_-]{8,64}')->name('finance.topup.failed');
 Route::get('failed', [CheckoutController::class, 'failed'])->name('failed');
 Route::get('notify', [CheckoutController::class, 'notify'])->name('notify');
 Route::get('transactions', [TransactionController::class, 'index'])->name('transactions');
