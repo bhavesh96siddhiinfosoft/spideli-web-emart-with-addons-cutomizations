@@ -194,6 +194,14 @@
                                 <label class="custom-control-label"
                                     for="mypvit">{{ trans('lang.mypvit') }}</label>
                             </div>
+                            {{-- #92 Sebpay Cameroun: shown by showSebpayOption() (layouts/footer) --}}
+                            <div class="custom-control custom-radio border-bottom py-2" style="display:none;"
+                                id="sebpay_cm_box">
+                                <input type="radio" name="payment_method" id="sebpay_cm" value="sebpay_cm"
+                                    class="custom-control-input">
+                                <label class="custom-control-label"
+                                    for="sebpay_cm">{{ trans('lang.sebpay_cm') }}</label>
+                            </div>
                             <div class="custom-control custom-radio border-bottom py-2" style="display:none;"
                                 id="wallet_box">
                                 <input type="radio" name="payment_method" disabled id="wallet" value="wallet"
@@ -972,7 +980,7 @@
                     window.location.href = "<?php echo route('giftcard.pay'); ?>";
                 }
             });
-        } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit")) {
+        } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm")) {
 
             var orangepay_enable = $("#orangepay_enable").val();
             var orangepay_isSandbox = $("#orangepay_isSandbox").val();

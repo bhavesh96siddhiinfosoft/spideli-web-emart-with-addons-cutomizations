@@ -28,6 +28,7 @@ use App\Http\Controllers\SendEmailController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\MyCoolPayController;
 use App\Http\Controllers\MyPVitController;
+use App\Http\Controllers\SebpayController;
 use App\Http\Controllers\TrendingController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\PayLaterServiceChargeController;
@@ -130,6 +131,9 @@ Route::get('mypvit/return/{result}', [MyPVitController::class, 'back'])->where('
 Route::post('mypvit/callback/{token}', [MyPVitController::class, 'callback'])->where('token', '[a-f0-9]{40}')->name('mypvit.callback');
 Route::get('mypvit/handoff', [MyPVitController::class, 'handoff'])->name('mypvit.handoff');
 Route::get('mypvit/status/{reference}', [MyPVitController::class, 'status'])->where('reference', '[A-Za-z0-9]{6,20}')->name('mypvit.status');
+// #92 Sebpay: the return and callback links sent with each payment (see App\Services\Sebpay).
+Route::get('sebpay/{country}/return', [SebpayController::class, 'back'])->where('country', 'cm|gn')->name('sebpay.return');
+Route::post('sebpay/{country}/callback/{token}', [SebpayController::class, 'callback'])->where(['country' => 'cm|gn', 'token' => '[a-f0-9]{40}'])->name('sebpay.callback');
 Route::get('failed', [CheckoutController::class, 'failed'])->name('failed');
 Route::get('notify', [CheckoutController::class, 'notify'])->name('notify');
 Route::get('transactions', [TransactionController::class, 'index'])->name('transactions');

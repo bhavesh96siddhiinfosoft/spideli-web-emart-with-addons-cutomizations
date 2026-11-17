@@ -798,6 +798,15 @@ class ParcelController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('parcel_checkout')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($parcel_cart['cart_order']['payment_method'] == 'sebpay_cm') {
+                // #92: Sebpay Cameroun (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('cm', 'parcel', $parcel_cart['cart_order']['total_pay'], $parcel_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli parcel',
+                        ['name' => $parcel_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('parcel_success'), route('parcel_checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('parcel_checkout')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($parcel_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $parcel_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $parcel_cart['cart_order']['midtrans_serverKey'];
@@ -1095,6 +1104,15 @@ class ParcelController extends Controller
         if (isset($_GET['mypvit_token'])) {
             $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'parcel');   // #92: proven with PVit's status API
             if ($mypvit_paid) {
+                $parcel_cart['payment_status'] = true;
+                Session::put('parcel_cart', $parcel_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['sebpay_token'])) {
+            $sebpay_paid = \App\Services\Sebpay::confirmed($_GET['sebpay_token'], 'parcel');   // #92: proven with Sebpay (session approved)
+            if ($sebpay_paid) {
                 $parcel_cart['payment_status'] = true;
                 Session::put('parcel_cart', $parcel_cart);
                 Session::put('success', 'Payment successful');

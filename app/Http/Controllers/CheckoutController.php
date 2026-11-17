@@ -297,6 +297,15 @@ class CheckoutController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('checkout')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($cart['cart_order']['payment_method'] == 'sebpay_cm') {
+                // #92: Sebpay Cameroun (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('cm', 'checkout', $cart['cart_order']['total_pay'], $cart['cart_order']['currencyData']['code'] ?? '', 'Spideli order',
+                        ['name' => $cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('success'), route('checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('checkout')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($cart['cart_order']['payment_method']=='midtrans'){
 
                 $midtrans_enable = $cart['cart_order']['midtrans_enable'];
@@ -760,6 +769,16 @@ class CheckoutController extends Controller
             
             $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'checkout');   // #92: proven with PVit's status API
             if ($mypvit_paid) {
+                $cart['payment_status'] = true;
+                Session::put('cart', $cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['sebpay_token'])) {
+            
+            $sebpay_paid = \App\Services\Sebpay::confirmed($_GET['sebpay_token'], 'checkout');   // #92: proven with Sebpay (session approved)
+            if ($sebpay_paid) {
                 $cart['payment_status'] = true;
                 Session::put('cart', $cart);
                 Session::put('success', 'Payment successful');

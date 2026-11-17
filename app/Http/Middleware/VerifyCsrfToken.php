@@ -16,5 +16,7 @@ class VerifyCsrfToken extends Middleware
         'mycoolpay/callback/*',
         // #92: PVit posts its payment notices here (checked by IP, then confirmed with PVit's status API).
         'mypvit/callback/*',
+        // #92: Sebpay posts its signed payment notices here (X-SebPay-Signature checked).
+        'sebpay/*/callback/*',
     ];
 }

@@ -268,6 +268,15 @@ class PayExtraChargeController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('extra-pay-failed')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($ondemand_cart['cart_order']['payment_method'] == 'sebpay_cm') {
+                // #92: Sebpay Cameroun (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('cm', 'extra_charge', $ondemand_cart['cart_order']['total_pay'], $ondemand_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli extra charge',
+                        ['name' => $ondemand_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('extra-pay-success'), route('extra-pay-failed')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('extra-pay-failed')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($ondemand_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $ondemand_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $ondemand_cart['cart_order']['midtrans_serverKey'];
@@ -545,6 +554,15 @@ class PayExtraChargeController extends Controller
         if (isset($_GET['mypvit_token'])) {
             $mypvit_paid = \App\Services\MyPVit::confirmed($_GET['mypvit_token'], 'extra_charge');   // #92: proven with PVit's status API
             if ($mypvit_paid) {
+                $ondemand_cart['paymentStatus'] = true;
+                Session::put('ondemand_cart', $ondemand_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['sebpay_token'])) {
+            $sebpay_paid = \App\Services\Sebpay::confirmed($_GET['sebpay_token'], 'extra_charge');   // #92: proven with Sebpay (session approved)
+            if ($sebpay_paid) {
                 $ondemand_cart['paymentStatus'] = true;
                 Session::put('ondemand_cart', $ondemand_cart);
                 Session::put('success', 'Payment successful');

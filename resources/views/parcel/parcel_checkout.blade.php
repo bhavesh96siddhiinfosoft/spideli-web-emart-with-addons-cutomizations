@@ -229,6 +229,10 @@ session_start();
                                         <option value="mypvit" style="display: none;" id="mypvit_box">
                                             {{trans('lang.mypvit')}}
                                         </option>
+                                        {{-- #92 Sebpay Cameroun: shown by showSebpayOption() (layouts/footer) --}}
+                                        <option value="sebpay_cm" style="display: none;" id="sebpay_cm_box">
+                                            {{trans('lang.sebpay_cm')}}
+                                        </option>
                                         <option value="wallet" style="display: none;" id="wallet_box">
                                             {{trans('lang.wallet')}}
                                         </option>
@@ -1662,7 +1666,7 @@ session_start();
                     }
                 });
 
-            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit")) {
+            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm")) {
 
                 var orangepay_enable = $("#orangepay_enable").val();
                 var orangepay_isSandbox = $("#orangepay_isSandbox").val();

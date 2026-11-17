@@ -3276,7 +3276,8 @@
         'midtrans_box': 'midtrans_settings',
         'orangepay_box': 'orange_money_settings',
         'mycoolpay_box': 'mycoolpay_settings',
-        'mypvit_box': 'mypvit_settings'
+        'mypvit_box': 'mypvit_settings',
+        'sebpay_cm_box': 'sebpay_cm_settings'
     };
 
     /* #92: MyCoolPay. Every payment screen has a hidden #mycoolpay_box; it is
@@ -3340,6 +3341,36 @@
         });
     }
     $(document).ready(showMyPVitOption);
+
+    /* #92: Sebpay, one account per country (#sebpay_{country}_box): enabled,
+     * with its keys, and a region paying in that account's currency. */
+    function showSebpayOption(country) {
+        var box = document.getElementById('sebpay_' + country + '_box');
+        if (!box) {
+            return;
+        }
+        database.collection('settings').doc('sebpay_' + country + '_settings').get().then(async function (doc) {
+            var d = doc.exists ? doc.data() : null;
+            if (!(d && (d.isEnabled === true || d.enable === true) && d.publicKey && d.secretKey)) {
+                return;
+            }
+            var want = String(d.currency || (country === 'gn' ? 'GNF' : 'XAF')).toUpperCase();
+            try {
+                var cur = await getRegionCurrency();
+                var code = cur && cur.code ? String(cur.code).toUpperCase() : '';
+                if (code !== '' && code !== want) {
+                    $('#sebpay_' + country + '_box').remove();
+                    return;
+                }
+            } catch (e) {
+                console.error('Sebpay: region currency unknown', e);
+            }
+            $('#sebpay_' + country + '_box').show();
+        }).catch(function (e) {
+            console.error('Sebpay settings could not be read', e);
+        });
+    }
+    $(document).ready(function () { showSebpayOption('cm'); });
 
     /* #92: why a MyCoolPay payment did not start or was not accepted. */
     @if (session('mycoolpay_error'))
