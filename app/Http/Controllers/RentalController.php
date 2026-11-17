@@ -546,6 +546,15 @@ class RentalController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('rental_cars_checkout')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($rentalCarsData['cart_order']['payment_method'] == 'sebpay_gn') {
+                // #92: Sebpay Guinée (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('gn', 'rental', $rentalCarsData['cart_order']['total_pay'], $rentalCarsData['cart_order']['currencyData']['code'] ?? '', 'Spideli rental',
+                        ['name' => $rentalCarsData['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('rental_success'), route('rental_cars_checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('rental_cars_checkout')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($rentalCarsData['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $rentalCarsData['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $rentalCarsData['cart_order']['midtrans_serverKey'];

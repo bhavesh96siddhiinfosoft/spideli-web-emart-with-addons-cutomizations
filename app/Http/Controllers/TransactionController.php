@@ -245,6 +245,15 @@ class TransactionController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('transactions')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($user_wallet['data']['payment_method'] == 'sebpay_gn') {
+                // #92: Sebpay Guinée (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('gn', 'wallet', $user_wallet['data']['amount'], $user_wallet['data']['currencyData']['code'] ?? '', 'Spideli wallet top-up',
+                        ['name' => $user_wallet['data']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('wallet-success'), route('transactions')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('transactions')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if ($user_wallet['data']['payment_method'] == 'midtrans') {
                 $midtrans_enable = $user_wallet['data']['midtrans_enable'];
                 $midtrans_serverKey = $user_wallet['data']['midtrans_serverKey'];

@@ -289,6 +289,15 @@ class OnDemandCheckoutController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('ondemand-checkout')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($ondemand_cart['cart_order']['payment_method'] == 'sebpay_gn') {
+                // #92: Sebpay Guinée (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('gn', 'ondemand', $ondemand_cart['cart_order']['total_pay'], $ondemand_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli service booking',
+                        ['name' => $ondemand_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('ondemand-success'), route('ondemand-checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('ondemand-checkout')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($ondemand_cart['cart_order']['payment_method']=='midtrans'){
 
                 $midtrans_enable = $ondemand_cart['cart_order']['midtrans_enable'];

@@ -3277,7 +3277,8 @@
         'orangepay_box': 'orange_money_settings',
         'mycoolpay_box': 'mycoolpay_settings',
         'mypvit_box': 'mypvit_settings',
-        'sebpay_cm_box': 'sebpay_cm_settings'
+        'sebpay_cm_box': 'sebpay_cm_settings',
+        'sebpay_gn_box': 'sebpay_gn_settings'
     };
 
     /* #92: MyCoolPay. Every payment screen has a hidden #mycoolpay_box; it is
@@ -3370,7 +3371,7 @@
             console.error('Sebpay settings could not be read', e);
         });
     }
-    $(document).ready(function () { showSebpayOption('cm'); });
+    $(document).ready(function () { showSebpayOption('cm'); showSebpayOption('gn'); });
 
     /* #92: why a MyCoolPay payment did not start or was not accepted. */
     @if (session('mycoolpay_error'))

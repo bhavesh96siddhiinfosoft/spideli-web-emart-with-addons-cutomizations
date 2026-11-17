@@ -764,6 +764,7 @@ return [
     'mypvit_still_pending' => 'Votre paiement est encore en cours de confirmation. Si vous avez été débité, contactez le support.',
     'mypvit_waiting_text' => 'PVit confirme votre paiement auprès de l\'opérateur. Cette page vérifie à nouveau toute seule ; ne la fermez pas.',
     'sebpay_cm' => 'Sebpay Cameroun (mobile money)',
+    'sebpay_gn' => 'Sebpay Guinée (mobile money)',
     'sebpay_unavailable' => 'Sebpay n\'est pas disponible pour le moment. Veuillez choisir un autre moyen de paiement.',
     'sebpay_start_failed' => 'Le paiement Sebpay n\'a pas pu démarrer. Veuillez réessayer.',
     'sebpay_no_pending' => 'Aucun paiement Sebpay n\'est en attente dans ce navigateur.',

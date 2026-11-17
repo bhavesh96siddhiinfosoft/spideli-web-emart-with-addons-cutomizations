@@ -233,6 +233,10 @@ session_start();
                                         <option value="sebpay_cm" style="display: none;" id="sebpay_cm_box">
                                             {{trans('lang.sebpay_cm')}}
                                         </option>
+                                        {{-- #92 Sebpay Guinée: shown by showSebpayOption() (layouts/footer) --}}
+                                        <option value="sebpay_gn" style="display: none;" id="sebpay_gn_box">
+                                            {{trans('lang.sebpay_gn')}}
+                                        </option>
                                         <option value="wallet" style="display: none;" id="wallet_box">
                                             {{trans('lang.wallet')}}
                                         </option>
@@ -1666,7 +1670,7 @@ session_start();
                     }
                 });
 
-            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm")) {
+            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm" || payment_method == "sebpay_gn")) {
 
                 var orangepay_enable = $("#orangepay_enable").val();
                 var orangepay_isSandbox = $("#orangepay_isSandbox").val();

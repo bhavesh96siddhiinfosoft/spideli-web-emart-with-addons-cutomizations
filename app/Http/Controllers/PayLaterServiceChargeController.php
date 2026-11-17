@@ -439,6 +439,15 @@ class PayLaterServiceChargeController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('service-charge-failed')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($service_charge_cart['cart_order']['payment_method'] == 'sebpay_gn') {
+                // #92: Sebpay Guinée (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('gn', 'service_charge', $service_charge_cart['cart_order']['total_pay'], $service_charge_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli service charge',
+                        ['name' => $service_charge_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('service-charge-success'), route('service-charge-failed')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('service-charge-failed')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($service_charge_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $service_charge_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $service_charge_cart['cart_order']['midtrans_serverKey'];

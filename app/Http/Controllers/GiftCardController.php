@@ -304,6 +304,15 @@ class GiftCardController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('customize.giftcard')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($cart['gift_cart_order']['payment_method'] == 'sebpay_gn') {
+                // #92: Sebpay Guinée (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('gn', 'giftcard', $cart['gift_cart_order']['total_pay'], $cart['gift_cart_order']['currencyData']['code'] ?? '', 'Spideli gift card',
+                        ['name' => $cart['gift_cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('giftcard.success'), route('customize.giftcard')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('customize.giftcard')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($cart['gift_cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $cart['gift_cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $cart['gift_cart_order']['midtrans_serverKey'];

@@ -72,6 +72,8 @@ if (@$rentalCarsData['decimal_degits']) {
                         <option value="mypvit" style="display: none;" id="mypvit_box">{{trans('lang.mypvit')}}</option>
                         {{-- #92 Sebpay Cameroun: shown by showSebpayOption() (layouts/footer) --}}
                         <option value="sebpay_cm" style="display: none;" id="sebpay_cm_box">{{trans('lang.sebpay_cm')}}</option>
+                        {{-- #92 Sebpay Guinée: shown by showSebpayOption() (layouts/footer) --}}
+                        <option value="sebpay_gn" style="display: none;" id="sebpay_gn_box">{{trans('lang.sebpay_gn')}}</option>
                         <option value="wallet" style="display: none;" id="wallet_box"></option>
                     </select>
                     <input type="hidden" id="isEnabled">

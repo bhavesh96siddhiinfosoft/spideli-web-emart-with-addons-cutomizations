@@ -306,6 +306,15 @@ class CheckoutController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('checkout')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($cart['cart_order']['payment_method'] == 'sebpay_gn') {
+                // #92: Sebpay Guinée (App\Services\Sebpay); the keys stay on the server.
+                try {
+                    return redirect()->away(\App\Services\Sebpay::start('gn', 'checkout', $cart['cart_order']['total_pay'], $cart['cart_order']['currencyData']['code'] ?? '', 'Spideli order',
+                        ['name' => $cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('success'), route('checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('checkout')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($cart['cart_order']['payment_method']=='midtrans'){
 
                 $midtrans_enable = $cart['cart_order']['midtrans_enable'];

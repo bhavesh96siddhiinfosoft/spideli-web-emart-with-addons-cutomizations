@@ -186,6 +186,11 @@
                                 <input type="radio" name="payment_method" id="sebpay_cm" value="sebpay_cm" class="custom-control-input">
                                 <label class="custom-control-label" for="sebpay_cm">{{ trans('lang.sebpay_cm') }}</label>
                             </div>
+                            {{-- #92 Sebpay Guinée: shown by showSebpayOption() (layouts/footer) --}}
+                            <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="sebpay_gn_box">
+                                <input type="radio" name="payment_method" id="sebpay_gn" value="sebpay_gn" class="custom-control-input">
+                                <label class="custom-control-label" for="sebpay_gn">{{ trans('lang.sebpay_gn') }}</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -492,7 +497,7 @@
                 midtrans_image: $("#midtrans_image").val(),
                 midtrans_isSandbox: $("#midtrans_isSandbox").val()
             });
-        } else if (paymentMethod === "orangepay" || paymentMethod === "mycoolpay" || paymentMethod === "mypvit" || paymentMethod === "sebpay_cm") {
+        } else if (paymentMethod === "orangepay" || paymentMethod === "mycoolpay" || paymentMethod === "mypvit" || paymentMethod === "sebpay_cm" || paymentMethod === "sebpay_gn") {
             Object.assign(ajaxData, {
                 orangepay_enable: $("#orangepay_enable").val(),
                 orangepay_auth: $("#orangepay_auth").val(),
