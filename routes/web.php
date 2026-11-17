@@ -29,6 +29,7 @@ use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\MyCoolPayController;
 use App\Http\Controllers\MyPVitController;
 use App\Http\Controllers\SebpayController;
+use App\Http\Controllers\PiSpiController;
 use App\Http\Controllers\TrendingController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\PayLaterServiceChargeController;
@@ -134,6 +135,11 @@ Route::get('mypvit/status/{reference}', [MyPVitController::class, 'status'])->wh
 // #92 Sebpay: the return and callback links sent with each payment (see App\Services\Sebpay).
 Route::get('sebpay/{country}/return', [SebpayController::class, 'back'])->where('country', 'cm|gn')->name('sebpay.return');
 Route::post('sebpay/{country}/callback/{token}', [SebpayController::class, 'callback'])->where(['country' => 'cm|gn', 'token' => '[a-f0-9]{40}'])->name('sebpay.callback');
+// #92: PI-SPI (the customer gives their alias on our page, then accepts in their bank app)
+Route::get('pispi/pay', [PiSpiController::class, 'pay'])->name('pispi.pay');
+Route::post('pispi/request', [PiSpiController::class, 'request'])->middleware('throttle:20,1')->name('pispi.request');
+Route::get('pispi/status', [PiSpiController::class, 'status'])->middleware('throttle:60,1')->name('pispi.status');
+Route::get('pispi/cancel', [PiSpiController::class, 'cancel'])->name('pispi.cancel');
 Route::get('failed', [CheckoutController::class, 'failed'])->name('failed');
 Route::get('notify', [CheckoutController::class, 'notify'])->name('notify');
 Route::get('transactions', [TransactionController::class, 'index'])->name('transactions');

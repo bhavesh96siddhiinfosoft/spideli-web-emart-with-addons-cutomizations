@@ -448,6 +448,15 @@ class PayLaterServiceChargeController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('service-charge-failed')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($service_charge_cart['cart_order']['payment_method'] == 'pispi') {
+                // #92: PI-SPI (App\Services\PiSpi): our page takes the customer's alias; the credentials stay on the server.
+                try {
+                    return redirect(\App\Services\PiSpi::start('service_charge', $service_charge_cart['cart_order']['total_pay'], $service_charge_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli service charge',
+                        ['name' => $service_charge_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('service-charge-success'), route('service-charge-failed')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('service-charge-failed')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($service_charge_cart['cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $service_charge_cart['cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $service_charge_cart['cart_order']['midtrans_serverKey'];
@@ -734,6 +743,15 @@ class PayLaterServiceChargeController extends Controller
         if (isset($_GET['sebpay_token'])) {
             $sebpay_paid = \App\Services\Sebpay::confirmed($_GET['sebpay_token'], 'service_charge');   // #92: proven with Sebpay (session approved)
             if ($sebpay_paid) {
+                $service_charge_cart['paymentStatus'] = true;
+                Session::put('service_charge_cart', $service_charge_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['pispi_token'])) {
+            $pispi_paid = \App\Services\PiSpi::confirmed($_GET['pispi_token'], 'service_charge');   // #92: proven with PI-SPI (request IRREVOCABLE)
+            if ($pispi_paid) {
                 $service_charge_cart['paymentStatus'] = true;
                 Session::put('service_charge_cart', $service_charge_cart);
                 Session::put('success', 'Payment successful');

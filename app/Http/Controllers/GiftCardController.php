@@ -313,6 +313,15 @@ class GiftCardController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('customize.giftcard')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($cart['gift_cart_order']['payment_method'] == 'pispi') {
+                // #92: PI-SPI (App\Services\PiSpi): our page takes the customer's alias; the credentials stay on the server.
+                try {
+                    return redirect(\App\Services\PiSpi::start('giftcard', $cart['gift_cart_order']['total_pay'], $cart['gift_cart_order']['currencyData']['code'] ?? '', 'Spideli gift card',
+                        ['name' => $cart['gift_cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('giftcard.success'), route('customize.giftcard')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('customize.giftcard')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($cart['gift_cart_order']['payment_method']=='midtrans'){
                 $midtrans_enable = $cart['gift_cart_order']['midtrans_enable'];
                 $midtrans_serverKey = $cart['gift_cart_order']['midtrans_serverKey'];
@@ -596,6 +605,15 @@ class GiftCardController extends Controller
         if (isset($_GET['sebpay_token'])) {
             $sebpay_paid = \App\Services\Sebpay::confirmed($_GET['sebpay_token'], 'giftcard');   // #92: proven with Sebpay (session approved)
             if ($sebpay_paid) {
+                $cart['payment_status'] = true;
+                Session::put('gift_cart', $cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['pispi_token'])) {
+            $pispi_paid = \App\Services\PiSpi::confirmed($_GET['pispi_token'], 'giftcard');   // #92: proven with PI-SPI (request IRREVOCABLE)
+            if ($pispi_paid) {
                 $cart['payment_status'] = true;
                 Session::put('gift_cart', $cart);
                 Session::put('success', 'Payment successful');

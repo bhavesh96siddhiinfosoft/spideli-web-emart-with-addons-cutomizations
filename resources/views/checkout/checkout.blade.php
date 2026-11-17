@@ -161,6 +161,11 @@
                                     <input type="radio" name="payment_method" id="sebpay_gn" value="sebpay_gn" class="custom-control-input">
                                     <label class="custom-control-label" for="sebpay_gn">{{ trans('lang.sebpay_gn') }}</label>
                                 </div>
+                                {{-- #92 PI-SPI: shown by showPiSpiOption() (layouts/footer) --}}
+                                <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="pispi_box">
+                                    <input type="radio" name="payment_method" id="pispi" value="pispi" class="custom-control-input">
+                                    <label class="custom-control-label" for="pispi">{{ trans('lang.pispi') }}</label>
+                                </div>
                                 <div class="custom-control custom-radio border-bottom py-2" style="display:none;" id="wallet_box">
                                     <input type="radio" name="payment_method" disabled id="wallet" value="wallet" class="custom-control-input">
                                     <label class="custom-control-label" for="wallet">{{ trans('lang.wallet_available') }}
@@ -1539,7 +1544,7 @@
                                     window.location.href = "<?php echo route('pay'); ?>";
                                 }
                             });
-                        } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm" || payment_method == "sebpay_gn")) {
+                        } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm" || payment_method == "sebpay_gn" || payment_method == "pispi")) {
                             var orangepay_enable = $("#orangepay_enable").val();
                             var orangepay_isSandbox = $("#orangepay_isSandbox").val();
                             var orangepay_clientId = $("#orangepay_clientId").val();

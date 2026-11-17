@@ -3278,7 +3278,8 @@
         'mycoolpay_box': 'mycoolpay_settings',
         'mypvit_box': 'mypvit_settings',
         'sebpay_cm_box': 'sebpay_cm_settings',
-        'sebpay_gn_box': 'sebpay_gn_settings'
+        'sebpay_gn_box': 'sebpay_gn_settings',
+        'pispi_box': 'pispi_settings'
     };
 
     /* #92: MyCoolPay. Every payment screen has a hidden #mycoolpay_box; it is
@@ -3372,6 +3373,34 @@
         });
     }
     $(document).ready(function () { showSebpayOption('cm'); showSebpayOption('gn'); });
+
+    /* #92: PI-SPI (BCEAO): enabled, set up, and a region paying in XOF. The
+     * client secret, API key and certificate are only used on the server. */
+    function showPiSpiOption() {
+        if (!document.getElementById('pispi_box')) {
+            return;
+        }
+        database.collection('settings').doc('pispi_settings').get().then(async function (doc) {
+            var d = doc.exists ? doc.data() : null;
+            if (!(d && (d.isEnabled === true || d.enable === true) && d.tokenUrl && d.clientId && d.payeAlias)) {
+                return;
+            }
+            try {
+                var cur = await getRegionCurrency();
+                var code = cur && cur.code ? String(cur.code).toUpperCase() : '';
+                if (code !== '' && code !== 'XOF') {
+                    $('#pispi_box').remove();
+                    return;
+                }
+            } catch (e) {
+                console.error('PI-SPI: region currency unknown', e);
+            }
+            $('#pispi_box').show();
+        }).catch(function (e) {
+            console.error('PI-SPI settings could not be read', e);
+        });
+    }
+    $(document).ready(showPiSpiOption);
 
     /* #92: why a MyCoolPay payment did not start or was not accepted. */
     @if (session('mycoolpay_error'))

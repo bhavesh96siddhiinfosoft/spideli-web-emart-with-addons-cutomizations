@@ -298,6 +298,15 @@ class OnDemandCheckoutController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('ondemand-checkout')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($ondemand_cart['cart_order']['payment_method'] == 'pispi') {
+                // #92: PI-SPI (App\Services\PiSpi): our page takes the customer's alias; the credentials stay on the server.
+                try {
+                    return redirect(\App\Services\PiSpi::start('ondemand', $ondemand_cart['cart_order']['total_pay'], $ondemand_cart['cart_order']['currencyData']['code'] ?? '', 'Spideli service booking',
+                        ['name' => $ondemand_cart['cart_order']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('ondemand-success'), route('ondemand-checkout')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('ondemand-checkout')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if($ondemand_cart['cart_order']['payment_method']=='midtrans'){
 
                 $midtrans_enable = $ondemand_cart['cart_order']['midtrans_enable'];
@@ -578,6 +587,15 @@ class OnDemandCheckoutController extends Controller
         if (isset($_GET['sebpay_token'])) {
             $sebpay_paid = \App\Services\Sebpay::confirmed($_GET['sebpay_token'], 'ondemand');   // #92: proven with Sebpay (session approved)
             if ($sebpay_paid) {
+                $ondemand_cart['paymentStatus'] = true;
+                Session::put('ondemand_cart', $ondemand_cart);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['pispi_token'])) {
+            $pispi_paid = \App\Services\PiSpi::confirmed($_GET['pispi_token'], 'ondemand');   // #92: proven with PI-SPI (request IRREVOCABLE)
+            if ($pispi_paid) {
                 $ondemand_cart['paymentStatus'] = true;
                 Session::put('ondemand_cart', $ondemand_cart);
                 Session::put('success', 'Payment successful');

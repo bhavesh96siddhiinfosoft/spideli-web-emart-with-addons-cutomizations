@@ -254,6 +254,15 @@ class TransactionController extends Controller
                 } catch (\Throwable $e) {
                     return redirect()->route('transactions')->with('mycoolpay_error', $e->getMessage());
                 }
+} else if ($user_wallet['data']['payment_method'] == 'pispi') {
+                // #92: PI-SPI (App\Services\PiSpi): our page takes the customer's alias; the credentials stay on the server.
+                try {
+                    return redirect(\App\Services\PiSpi::start('wallet', $user_wallet['data']['amount'], $user_wallet['data']['currencyData']['code'] ?? '', 'Spideli wallet top-up',
+                        ['name' => $user_wallet['data']['authorName'] ?? '', 'email' => \Illuminate\Support\Facades\Auth::user()->email ?? ''],
+                        route('wallet-success'), route('transactions')));
+                } catch (\Throwable $e) {
+                    return redirect()->route('transactions')->with('mycoolpay_error', $e->getMessage());
+                }
             } else if ($user_wallet['data']['payment_method'] == 'midtrans') {
                 $midtrans_enable = $user_wallet['data']['midtrans_enable'];
                 $midtrans_serverKey = $user_wallet['data']['midtrans_serverKey'];
@@ -560,6 +569,16 @@ class TransactionController extends Controller
             $sebpay_paid = \App\Services\Sebpay::confirmed($_GET['sebpay_token'], 'wallet');   // #92: proven with Sebpay (session approved)
             if ($sebpay_paid) {
                 $user_wallet['transaction_id'] = $sebpay_paid['reference'];
+                $user_wallet['payment_status'] = true;
+                Session::put('user_wallet', $user_wallet);
+                Session::put('success', 'Payment successful');
+                Session::save();
+            }
+        }
+        if (isset($_GET['pispi_token'])) {
+            $pispi_paid = \App\Services\PiSpi::confirmed($_GET['pispi_token'], 'wallet');   // #92: proven with PI-SPI (request IRREVOCABLE)
+            if ($pispi_paid) {
+                $user_wallet['transaction_id'] = $pispi_paid['reference'];
                 $user_wallet['payment_status'] = true;
                 Session::put('user_wallet', $user_wallet);
                 Session::put('success', 'Payment successful');

@@ -237,6 +237,10 @@ session_start();
                                         <option value="sebpay_gn" style="display: none;" id="sebpay_gn_box">
                                             {{trans('lang.sebpay_gn')}}
                                         </option>
+                                        {{-- #92 PI-SPI: shown by showPiSpiOption() (layouts/footer) --}}
+                                        <option value="pispi" style="display: none;" id="pispi_box">
+                                            {{trans('lang.pispi')}}
+                                        </option>
                                         <option value="wallet" style="display: none;" id="wallet_box">
                                             {{trans('lang.wallet')}}
                                         </option>
@@ -1670,7 +1674,7 @@ session_start();
                     }
                 });
 
-            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm" || payment_method == "sebpay_gn")) {
+            } else if ((payment_method == "orangepay" || payment_method == "mycoolpay" || payment_method == "mypvit" || payment_method == "sebpay_cm" || payment_method == "sebpay_gn" || payment_method == "pispi")) {
 
                 var orangepay_enable = $("#orangepay_enable").val();
                 var orangepay_isSandbox = $("#orangepay_isSandbox").val();
