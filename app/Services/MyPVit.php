@@ -211,6 +211,8 @@ class MyPVit
             Log::warning('MyPVIT link refused', ['http' => $r->status(), 'message' => $r->json('message'), 'flow' => $flow]);
             throw new \RuntimeException(trans('lang.mypvit_start_failed'));
         }
+        // A website payment: forget any store / provider hand-off left in this browser.
+        \Illuminate\Support\Facades\Cookie::queue(\Illuminate\Support\Facades\Cookie::forget('mypvit_back'));
         Session::put(self::SESSION, [
             'flow' => $flow, 'reference' => $reference, 'amount' => $amount, 'currency' => 'XAF',
             'successUrl' => $successUrl, 'failUrl' => $failUrl,

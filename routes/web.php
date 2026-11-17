@@ -128,6 +128,8 @@ Route::post('mycoolpay/callback/{token}', [MyCoolPayController::class, 'callback
 // #92 MyPVIT (PVit): the links registered in the PVit merchant space > Urls (see App\Services\MyPVit).
 Route::get('mypvit/return/{result}', [MyPVitController::class, 'back'])->where('result', 'success|failure')->name('mypvit.return');
 Route::post('mypvit/callback/{token}', [MyPVitController::class, 'callback'])->where('token', '[a-f0-9]{40}')->name('mypvit.callback');
+Route::get('mypvit/handoff', [MyPVitController::class, 'handoff'])->name('mypvit.handoff');
+Route::get('mypvit/status/{reference}', [MyPVitController::class, 'status'])->where('reference', '[A-Za-z0-9]{6,20}')->name('mypvit.status');
 Route::get('failed', [CheckoutController::class, 'failed'])->name('failed');
 Route::get('notify', [CheckoutController::class, 'notify'])->name('notify');
 Route::get('transactions', [TransactionController::class, 'index'])->name('transactions');
