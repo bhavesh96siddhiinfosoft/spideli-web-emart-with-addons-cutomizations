@@ -221,7 +221,7 @@
                     providerImg = placeholderImageSrc;
                 }
                 $('.providerImg_' + providerId).attr('src', providerImg);
-                $('.providerName_' + providerId).html(providerData.firstName + ' ' + providerData.lastName)
+                $('.providerName_' + providerId).text(providerData.firstName + ' ' + providerData.lastName).append(spideliVerifiedBadge(providerData.isDocumentVerify === true));
             }
         })
         return providerData;

@@ -1067,4 +1067,5 @@ return [
     'task_role_customer' => 'أنت',
     'task_role_provider' => 'مقدم الخدمة',
     'task_role_worker' => 'العامل',
+    'verified' => 'مُوثَّق',
 ];

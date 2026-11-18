@@ -469,7 +469,16 @@
                 console.error('store subscriptions could not be loaded', e);
             }
 
-            $("#vendor_title").append(vendorDetails.title);
+            $("#vendor_title").text(vendorDetails.title);
+            if (vendorDetails.isDocumentVerify === true) {
+                $("#vendor_title").append(spideliVerifiedBadge(true));
+            } else if (typeof vendorDetails.isDocumentVerify === 'undefined' && vendorDetails.author) {
+                database.collection('users').doc(vendorDetails.author).get().then(function (uSnap) {
+                    if (uSnap.exists && uSnap.data().isDocumentVerify === true) {
+                        $("#vendor_title").append(spideliVerifiedBadge(true));
+                    }
+                }).catch(function () {});
+            }
             $("#vendor_address").append(vendorDetails.location);
             $("#vendor_shop_status").html("{{ trans('lang.closed') }}");
             $("#vendor_shop_status").addClass('close');

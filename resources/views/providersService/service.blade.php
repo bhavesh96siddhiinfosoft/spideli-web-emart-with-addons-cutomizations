@@ -633,7 +633,7 @@
                 var url = '{{ route("ondemand-providerdetail", [":id"])}}';
                 url = url.replace(':id', providerId);
                 $(".provider_url").attr("href", url);
-                $(".provider_name").html('<a href="' + url + '">' + data.firstName + ' ' + data.lastName + '</a>');
+                $(".provider_name").html('<a href="' + url + '">' + data.firstName + ' ' + data.lastName + '</a>' + spideliVerifiedBadge(data.isDocumentVerify === true));
                 $(".provider-total-review").text(data.reviewsCount);
             }
         });
@@ -741,7 +741,7 @@
                     providerImg = placeholderImageSrc;
                 }
                 $('.providerImg_' + providerId).attr('src', providerImg);
-                $('.providerName_' + providerId).html(providerData.firstName + ' ' + providerData.lastName)
+                $('.providerName_' + providerId).text(providerData.firstName + ' ' + providerData.lastName).append(spideliVerifiedBadge(providerData.isDocumentVerify === true));
             }
         })
         return providerData;

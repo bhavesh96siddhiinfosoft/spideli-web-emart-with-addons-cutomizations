@@ -193,7 +193,7 @@
             <?php if (Auth::check()) { ?>
             checkFavoriteProduct(providerDetails.id);
             <?php } ?>
-            $("#provider_title").html(providerDetails.firstName + ' ' + providerDetails.lastName);
+            $("#provider_title").text(providerDetails.firstName + ' ' + providerDetails.lastName).append(spideliVerifiedBadge(providerDetails.isDocumentVerify === true));
             $("#provider_email").html(providerDetails.email);
             $('#provider_phone').html(providerDetails.phoneNumber);
             if (providerDetails.hasOwnProperty('profilePictureURL') && providerDetails.profilePictureURL != '') {

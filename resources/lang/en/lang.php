@@ -1252,4 +1252,5 @@ return [
     'task_role_customer' => 'You',
     'task_role_provider' => 'Provider',
     'task_role_worker' => 'Worker',
+    'verified' => 'Verified',
 ];

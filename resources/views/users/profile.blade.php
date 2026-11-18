@@ -217,7 +217,7 @@ foreach ($countries as $keycountry => $valuecountry) {
                 var user = snapshots.data();
                 var wallet_amount_user = 0;
                 $(".user_email_show").html(user.email);
-                $(".user_full_name").html(user.firstName + ' ' + user.lastName);
+                $(".user_full_name").text(user.firstName + ' ' + user.lastName).append(spideliVerifiedBadge(spideliCustomerKycVerified(user)));
                 if (user.hasOwnProperty('wallet_amount') && user.wallet_amount != '' && user.wallet_amount != '0') {
                     wallet_amount_user = user.wallet_amount;
                 }

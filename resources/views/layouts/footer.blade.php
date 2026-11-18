@@ -6022,4 +6022,30 @@
 
             return out.join(', ');
         }
+
+        /* Point #111: green "Verified" badge helpers (inline SVG, #0FBF00).
+         * - Customer: Finance KYC approved (kycStatus === 'approved' or non-empty kycLevel !== 'none').
+         * - Store / Provider: isDocumentVerify === true. */
+        function spideliCustomerKycVerified(user) {
+            if (!user) {
+                return false;
+            }
+            if (user.kycStatus === 'approved') {
+                return true;
+            }
+            var lvl = user.kycLevel != null ? String(user.kycLevel).trim().toLowerCase() : '';
+            return lvl !== '' && lvl !== 'none';
+        }
+
+        function spideliVerifiedBadge(isVerified, title) {
+            if (!isVerified) {
+                return '';
+            }
+            var label = title || "{{ trans('lang.verified') }}";
+            var safe = String(label).replace(/"/g, '&quot;');
+            return ' <span class="spideli-verified-badge" title="' + safe + '" aria-label="' + safe + '" style="display:inline-flex;align-items:center;vertical-align:middle;margin-left:4px;">'
+                + '<svg width="16" height="16" viewBox="0 0 24 24" fill="#0FBF00" aria-hidden="true">'
+                + '<path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-12.91 4.72l-3.8-3.81 1.48-1.48 2.32 2.33 5.85-5.87 1.48 1.48-7.33 7.35z"/>'
+                + '</svg></span>';
+        }
 </script>

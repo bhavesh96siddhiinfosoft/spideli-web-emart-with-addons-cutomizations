@@ -1235,4 +1235,5 @@ return [
     'task_role_provider' => 'Prestataire',
     'task_role_worker' => 'Employé',
     'pickupdropoff_date' => 'Date de prise en charge / dépose',
+    'verified' => 'Vérifié',
 ];
