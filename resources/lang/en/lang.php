@@ -1253,4 +1253,15 @@ return [
     'task_role_provider' => 'Provider',
     'task_role_worker' => 'Worker',
     'verified' => 'Verified',
+    // #112 rental by the day
+    'rental_number_of_days' => 'Number of days',
+    'rental_days_range' => ':min to :max days',
+    'rental_per_day' => 'per day',
+    'rental_return_date' => 'Return date',
+    'rental_booking_note' => 'Note for the booking (optional)',
+    'rental_booking_note_placeholder' => 'For example: child seat, meeting point…',
+    'rental_days_invalid' => 'Choose a whole number of days within the limits of this package.',
+    'rental_by_the_day' => 'By the day',
+    'rental_days_unit' => 'days',
+    'rental_note_label' => 'Note',
 ];

@@ -121,6 +121,13 @@
 
     var append_categories = '';
     var rental_orders = database.collection('rental_orders');
+
+    // #112: "By the day: 3 days" under the package name (no customer text here)
+    function spideliRentalDaysLine(order) {
+        if (!order || order.rentalType !== 'daily') return '';
+        var days = parseInt(order.rentalDays, 10) || 0;
+        return '<p class="small text-muted mb-0">' + @json(trans('lang.rental_by_the_day')) + ': ' + days + ' ' + @json(trans('lang.rental_days_unit')) + '</p>';
+    }
     var completedorsersref = database.collection('rental_orders').where("authorID", "==", user_uuid).orderBy('createdAt', 'desc');
     var deliveryCharge = 0;
     var taxSetting = [];
@@ -556,7 +563,7 @@
                                   </div>
                                  <div class="car-feture">
                                     <h3>{{trans("lang.package_info")}}</h3> 
-                                    <p>${val.rentalPackageModel.name}</p>
+                                    <p>${val.rentalPackageModel.name}</p>${spideliRentalDaysLine(val)}
                                     <p>${val.rentalPackageModel.description}</p>
                                     <p>${getFormattedPrice(parseFloat(val.rentalPackageModel.baseFare))}</p>
                                     
@@ -746,7 +753,7 @@
                                   </div>
                                  <div class="car-feture">
                                    <h3>{{trans("lang.package_info")}}</h3>
-                                        <p>${val.rentalPackageModel.name}</p>
+                                        <p>${val.rentalPackageModel.name}</p>${spideliRentalDaysLine(val)}
                                         <p>${val.rentalPackageModel.description}</p>
                                         <p>${getFormattedPrice(parseFloat(val.rentalPackageModel.baseFare))}</p>
                                   </div>  
@@ -952,7 +959,7 @@
 
                                     <div class="car-feture">
                                        <h3>{{trans("lang.package_info")}}</h3>
-                                        <p>${val.rentalPackageModel.name}</p>
+                                        <p>${val.rentalPackageModel.name}</p>${spideliRentalDaysLine(val)}
                                         <p>${val.rentalPackageModel.description}</p>
                                         <p>${getFormattedPrice(parseFloat(val.rentalPackageModel.baseFare))}</p>
                                         

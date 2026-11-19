@@ -50,9 +50,15 @@ class RentalController extends Controller
         $rentalCarsData['taxesByScope'] = $data['taxesByScope'] ?? [];
         $rentalCarsData['taxSetting'] = $rentalCarsData['taxScope'] == "order" ? ($rentalCarsData['taxesByScope']['order'] ?? []) : [];
         $rentalCarsData['platformCharge'] = $data['platformCharge'] ?? 0;
-        
+
+        // #112: a package by the day is booked for N days: price, hours and km x N; the note is kept for every rental.
+        [$rentalCarsData, $daysError] = \App\Services\RentalDays::apply($rentalCarsData);
+        if ($daysError !== '') {
+            return response()->json(['status' => false, 'message' => trans('lang.rental_days_invalid')]);
+        }
+
         $rentalCarsData = $this->calculateTax($rentalCarsData);
-        
+
         Session::put('rentalCarsData', $rentalCarsData);
         Session::save();
         $res = array('data' => $rentalCarsData);

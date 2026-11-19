@@ -56,6 +56,20 @@
                                 </div>
                             </div>
                         </div>
+                        {{-- #112: number of days for a package by the day, and a note for any rental --}}
+                        <div class="row align-items-center form-row spd-rental-days-row" style="display:none">
+                            <div class="col-sm-12">
+                                <label for="rental_days">{{trans('lang.rental_number_of_days')}} <small class="text-muted" id="rental_days_range"></small></label>
+                                <input type="number" class="form-control" id="rental_days" min="1" step="1" value="1" inputmode="numeric">
+                                <small class="form-text text-muted" id="rental_days_summary"></small>
+                            </div>
+                        </div>
+                        <div class="row align-items-center form-row">
+                            <div class="col-sm-12">
+                                <label for="rental_note">{{trans('lang.rental_booking_note')}}</label>
+                                <textarea class="form-control" id="rental_note" rows="2" maxlength="500" placeholder="{{trans('lang.rental_booking_note_placeholder')}}"></textarea>
+                            </div>
+                        </div>
                         <div class="row align-items-center form-row drop-check">
                             <div class="col-sm-12">
                                 <div class="form-check">
@@ -194,6 +208,7 @@
         var rentalVehicleTypeRef = database.collection('rental_packages').where('vehicleTypeId','==',vehicleTypeId).where('published','==',true);
         rentalVehicleTypeRef.get().then(async function (snapshots) {
             $('#rental_package').empty().append("<option value=''>{{ trans('lang.select_rental_package')}}</option>");
+            spideliRentalDaysUI();
             if (snapshots.docs.length > 0) {
                 snapshots.docs.forEach((listval) => {
                     var data = listval.data();
@@ -202,7 +217,7 @@
                             .attr("value", data.id)
                             .attr("data-description", data.description)
                             .attr("data-price", data.baseFare)
-                            .attr("data-price-format", getProductFormattedPrice(parseFloat(data.baseFare)))
+                            .attr("data-price-format", getProductFormattedPrice(parseFloat(data.baseFare)) + (data.packageType === 'daily' ? ' ' + spdRentalText.perDay : ''))
                             .attr("data-package", JSON.stringify(data))
                             .text(data.name)
                     );
@@ -263,6 +278,70 @@
         }
     });
     
+    // #112: rental by the day
+    var spdRentalText = {
+        perDay: @json(trans('lang.rental_per_day')),
+        returnDate: @json(trans('lang.rental_return_date')),
+        range: @json(trans('lang.rental_days_range')),
+        invalid: @json(trans('lang.rental_days_invalid'))
+    };
+
+    function spideliSelectedPackage() {
+        var raw = $('#rental_package option:selected').attr('data-package');
+        if (!raw) return null;
+        try { return JSON.parse(raw); } catch (e) { return null; }
+    }
+
+    function spideliRentalDayLimits(pkg) {
+        var min = parseInt(pkg && pkg.minDays, 10), max = parseInt(pkg && pkg.maxDays, 10);
+        if (!(min >= 1)) min = 1;
+        if (!(max >= min)) max = Math.max(min, 365);
+        return {min: min, max: Math.min(max, 365)};
+    }
+
+    // Returns the number of days, or null when the value is not a whole number within the package's limits.
+    function spideliRentalDays(pkg) {
+        var text = String($('#rental_days').val() || '').trim();
+        if (!/^\d{1,3}$/.test(text)) return null;
+        var days = parseInt(text, 10), lim = spideliRentalDayLimits(pkg);
+        return (days >= lim.min && days <= lim.max) ? days : null;
+    }
+
+    function spideliRentalDaysUI() {
+        var pkg = spideliSelectedPackage();
+        if (!pkg || pkg.packageType !== 'daily') {
+            $('.spd-rental-days-row').hide();
+            return;
+        }
+        var lim = spideliRentalDayLimits(pkg);
+        $('#rental_days').attr({min: lim.min, max: lim.max});
+        $('#rental_days_range').text('(' + spdRentalText.range.replace(':min', lim.min).replace(':max', lim.max) + ')');
+        var days = spideliRentalDays(pkg);
+        var summary = '';
+        if (days !== null) {
+            var dayFare = parseFloat(pkg.baseFare) || 0;
+            summary = getProductFormattedPrice(dayFare) + ' × ' + days + ' = ' + getProductFormattedPrice(dayFare * days);
+            var start = moment($('.driverDates').val(), 'YYYY-MM-DD hh:mm A');
+            if (start.isValid()) {
+                summary += ' · ' + spdRentalText.returnDate + ': ' + start.clone().add(days * 24, 'hours').format('DD MMM YYYY, hh:mm A');
+            }
+        } else {
+            summary = spdRentalText.invalid;
+        }
+        $('#rental_days_summary').text(summary);
+        $('.spd-rental-days-row').show();
+    }
+
+    $(document).on('change', '#rental_package', function () {
+        var pkg = spideliSelectedPackage();
+        if (pkg && pkg.packageType === 'daily') {
+            $('#rental_days').val(spideliRentalDayLimits(pkg).min);
+        }
+        spideliRentalDaysUI();
+    });
+    $(document).on('input change', '#rental_days', spideliRentalDaysUI);
+    $('input[name="driverDates"]').on('apply.daterangepicker change', spideliRentalDaysUI);
+
     $(document).on('click', '#find_car', async function () {
         
         var platformCharge = '0';
@@ -289,6 +368,9 @@
         }else if (rentalPackageId == "") {
             $('.noData').html("{{trans('lang.rental_package_error')}}");
             window.scroll(0, 0);            
+        }else if (spideliSelectedPackage() && spideliSelectedPackage().packageType === 'daily' && spideliRentalDays(spideliSelectedPackage()) === null) {
+            $('.noData').html(spdRentalText.invalid);
+            window.scroll(0, 0);
         }else if (user_zone_id == null) {
             $('.noData').html("{{trans('lang.user_zone_error')}}");
             window.scroll(0, 0);            
@@ -319,6 +401,8 @@
                     taxesByScope,
                     platformCharge,
                     currencyData,
+                    rentalDays: (rentalPackageModel.packageType === 'daily') ? spideliRentalDays(rentalPackageModel) : null,
+                    bookingNote: String($('#rental_note').val() || '').trim().substring(0, 500),
                 };
 
              $.ajax({
@@ -328,6 +412,11 @@
                 dataType: 'json',
                 data: JSON.stringify(payload),
                 success: function (data) {
+                    if (data && data.status === false) {   // #112: refused day count
+                        $('.noData').show().text(data.message || spdRentalText.invalid);
+                        window.scroll(0, 0);
+                        return;
+                    }
                     var url = "{{route('rental_cars_checkout')}}";
                     window.location.href = url;
                 }

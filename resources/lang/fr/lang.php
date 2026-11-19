@@ -1236,4 +1236,15 @@ return [
     'task_role_worker' => 'Employé',
     'pickupdropoff_date' => 'Date de prise en charge / dépose',
     'verified' => 'Vérifié',
+    // #112 rental by the day
+    'rental_number_of_days' => 'Nombre de jours',
+    'rental_days_range' => 'de :min à :max jours',
+    'rental_per_day' => 'par jour',
+    'rental_return_date' => 'Date de retour',
+    'rental_booking_note' => 'Note pour la réservation (facultatif)',
+    'rental_booking_note_placeholder' => 'Par exemple : siège enfant, point de rendez-vous…',
+    'rental_days_invalid' => 'Choisissez un nombre entier de jours dans les limites de ce forfait.',
+    'rental_by_the_day' => 'À la journée',
+    'rental_days_unit' => 'jours',
+    'rental_note_label' => 'Note',
 ];

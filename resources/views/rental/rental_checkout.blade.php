@@ -470,7 +470,18 @@
 
             var zoneId = @json(@$rentalCarsData['zoneId']);
 
-            database.collection('rental_orders').doc(id_order).set({
+            // #112: rental type, days, return date and the customer's note
+            var rentalType = @json(@$rentalCarsData['rentalType'] ?: 'hourly');
+            var rentalDays = parseInt(@json(@$rentalCarsData['rentalDays']), 10) || 0;
+            var bookingNote = @json((string) (@$rentalCarsData['bookingNote'] ?? ''));
+            var rentalDayFields = {'rentalType': rentalType === 'daily' ? 'daily' : 'hourly', 'bookingNote': bookingNote};
+            if (rentalDayFields.rentalType === 'daily' && rentalDays > 0) {
+                rentalDayFields.rentalDays = rentalDays;
+                rentalDayFields.returnDateTime = firebase.firestore.Timestamp.fromDate(
+                    new Date(pickUpDateTime.toDate().getTime() + rentalDays * 24 * 60 * 60 * 1000));
+            }
+
+            database.collection('rental_orders').doc(id_order).set(Object.assign({
                 'adminCommission': adminCommission,
                 'adminCommissionType': adminCommissionType,
                 'author': author,
@@ -506,7 +517,7 @@
                 'platformFee': platformCharge,
                 'platformTax': platformTax,
 
-            }).then(function (result) {
+            }, rentalDayFields)).then(function (result) {
 
                 $.ajax({
                     type: 'POST',

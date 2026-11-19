@@ -23,7 +23,28 @@ if (@$rentalCarsData['decimal_degits']) {
                 <h3>{{trans('lang.rental_package')}}</h3>
                 <p><span class="icon"><i class="fa fa-clock-o"></i></span> <?php echo @$rentalCarsData['rentalPackageModel']['name']; ?></p>
                 <p><span class="icon"><i class="fa fa-list-alt"></i></span> <?php echo @$rentalCarsData['rentalPackageModel']['description']; ?></p>
+                {{-- #112: rental by the day --}}
+                @if((@$rentalCarsData['rentalType']) === 'daily')
+                    <p class="spd-rental-days"><span class="icon"><i class="fa fa-calendar-check-o"></i></span>
+                        {{ trans('lang.rental_by_the_day') }}: {{ (int) $rentalCarsData['rentalDays'] }} {{ trans('lang.rental_days_unit') }}
+                        ({{ formatCurrency((float) ($rentalCarsData['rentalPackageModel']['dayFare'] ?? 0), $rentalCarsData['currencyData']) }} {{ trans('lang.rental_per_day') }})
+                    </p>
+                    @if(!empty($rentalCarsData['returnDate']))
+                        <p class="spd-rental-return"><span class="icon"><i class="fa fa-calendar"></i></span>
+                            {{ trans('lang.rental_return_date') }}: {{ date('d M Y, h:i A', strtotime($rentalCarsData['returnDate'])) }}
+                        </p>
+                    @endif
+                    <p class="spd-rental-included"><span class="icon"><i class="fa fa-road"></i></span>
+                        {{ $rentalCarsData['rentalPackageModel']['includedHours'] }}h / {{ $rentalCarsData['rentalPackageModel']['includedDistance'] }} Km
+                    </p>
+                @endif
             </div>
+            @if(!empty($rentalCarsData['bookingNote']))
+                <div class="carbook-summary-box mb-4 spd-rental-note">
+                    <h3>{{ trans('lang.rental_note_label') }}</h3>
+                    <p style="white-space:pre-wrap">{{ $rentalCarsData['bookingNote'] }}</p>
+                </div>
+            @endif
             <input type="hidden" id="pickupAddress" value="<?php echo @$rentalCarsData['pickLocation'];?>">
             <input type="hidden" id="pickupDateTime" value="<?php echo $rentalCarsData['startDate'];?>">
             <input type="hidden" id="address_lat" value="<?php echo @$rentalCarsData['address_lat'];?>">

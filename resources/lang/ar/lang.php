@@ -1068,4 +1068,15 @@ return [
     'task_role_provider' => 'مقدم الخدمة',
     'task_role_worker' => 'العامل',
     'verified' => 'مُوثَّق',
+    // #112 rental by the day
+    'rental_number_of_days' => 'عدد الأيام',
+    'rental_days_range' => 'من :min إلى :max أيام',
+    'rental_per_day' => 'لليوم',
+    'rental_return_date' => 'تاريخ الإرجاع',
+    'rental_booking_note' => 'ملاحظة للحجز (اختياري)',
+    'rental_booking_note_placeholder' => 'مثال: مقعد أطفال، نقطة اللقاء…',
+    'rental_days_invalid' => 'اختر عدداً صحيحاً من الأيام ضمن حدود هذه الباقة.',
+    'rental_by_the_day' => 'باليوم',
+    'rental_days_unit' => 'أيام',
+    'rental_note_label' => 'ملاحظة',
 ];

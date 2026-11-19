@@ -333,6 +333,31 @@
     var placeholderImage = '';
 
     var rental_orders = database.collection('rental_orders');
+
+    // #112: rental by the day (days, price per day, return date) and the customer's note, as list items
+    function spideliRentalText(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+    function spideliRentalDaysDetail(order, currency) {
+        var html = '';
+        if (order && order.rentalType === 'daily') {
+            var days = parseInt(order.rentalDays, 10) || 0;
+            html += '<li><label>' + @json(trans('lang.rental_by_the_day')) + ': </label>' + days + ' ' + @json(trans('lang.rental_days_unit'));
+            var dayFare = parseFloat(order.rentalPackageModel ? order.rentalPackageModel.dayFare : NaN);
+            if (!isNaN(dayFare)) {
+                html += ' (' + formatCurrency(dayFare, currency) + ' ' + @json(trans('lang.rental_per_day')) + ')';
+            }
+            html += '</li>';
+            if (order.returnDateTime && typeof order.returnDateTime.toDate === 'function') {
+                html += '<li><label>' + @json(trans('lang.rental_return_date')) + ': </label>' +
+                    order.returnDateTime.toDate().toLocaleString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) + '</li>';
+            }
+        }
+        if (order && order.bookingNote && String(order.bookingNote).trim() !== '') {
+            html += '<li><label>' + @json(trans('lang.rental_note_label')) + ': </label><span style="white-space:pre-wrap">' + spideliRentalText(order.bookingNote) + '</span></li>';
+        }
+        return html;
+    }
     
     var currentCurrency = '';
     var currencyAtRight = false;
@@ -595,6 +620,7 @@
                 rentalPackageDetail += `<li><label>{{trans("lang.package_included_distance")}}: </label>${includedDistance}Km</li>`;
                 rentalPackageDetail += `<li><label>{{trans("lang.package_extra_km_fare")}}: </label>${formatCurrency(parseFloat(order.rentalPackageModel.extraKmFare), orderCurrency)}</li>`;
                 rentalPackageDetail += `<li><label>{{trans("lang.package_extra_minute_fare")}}: </label>${formatCurrency(parseFloat(order.rentalPackageModel.extraMinuteFare), orderCurrency)}</li>`;
+                rentalPackageDetail += spideliRentalDaysDetail(order, orderCurrency);   // #112
             rentalPackageDetail += `</ul>`;
             $(".package-details").html(rentalPackageDetail)
 
