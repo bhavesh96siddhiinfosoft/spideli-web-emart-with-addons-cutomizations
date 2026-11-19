@@ -31,6 +31,12 @@
                 <div class="provider-services">
                     <div class="row">
                         <div class="col-md-12 provider-detail-right">
+                            {{-- #114: the provider's subscription plans (hidden when there are none) --}}
+                            <div id="provider-plans" class="mb-4" style="display:none;">
+                                <h5 class="font-weight-bold mb-1">{{ trans('lang.provider_sub_plans_heading') }}</h5>
+                                <p class="text-muted small mb-3">{{ trans('lang.provider_sub_plans_intro') }}</p>
+                                <div id="provider-plans-list" class="row"></div>
+                            </div>
                             <div id="service-list"></div>
                             <div id="load-more-div" class="align-items-center mt-4" style="display:none;text-align: center;">
                                 <a href="javascript:void(0)" class="btn btn-primary btn-lg" id="load-more">{{trans('lang.load_more')}}</a>
@@ -86,7 +92,42 @@
         inValidServiceIds = await getProviderServiceLimit(providerID);
         getProviderDetails();
         getServices(currentPage);
+        renderProviderPlans().catch(function (e) { console.error('provider plans', e); });
     });
+
+    /* #114: the provider's enabled subscription plans, each with a Subscribe button (the purchase page is on the
+     * server: /provider-subscription/{planId}). Text from Firestore is always escaped. */
+    function spdPlanEsc(value) {
+        return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    var spdPlanUrl = "{{ route('provider-subscription.show', 'PLANID00') }}";
+    function buildProviderPlanCard(plan) {
+        var period = String(plan.expiryDay) === '365' ? @json(trans('lang.provider_sub_per_year')) : @json(trans('lang.provider_sub_per_month'));
+        var points = (Array.isArray(plan.plan_points) ? plan.plan_points : []).filter(function (p) { return String(p || '').trim() !== ''; });
+        var html = '<div class="col-md-6 mb-3"><div class="border rounded p-3 h-100 d-flex flex-column">';
+        html += '<h6 class="font-weight-bold mb-1">' + spdPlanEsc(plan.title) + '</h6>';
+        html += '<div class="mb-2"><span class="h5 font-weight-bold">' + spdPlanEsc(getProductFormattedPrice(parseFloat(plan.price) || 0)) + '</span> <span class="text-muted small">' + spdPlanEsc(period) + '</span></div>';
+        if (plan.description) {
+            html += '<p class="small text-muted mb-2" style="white-space:pre-wrap">' + spdPlanEsc(plan.description) + '</p>';
+        }
+        if (points.length) {
+            html += '<ul class="small pl-3 mb-2">' + points.map(function (p) { return '<li>' + spdPlanEsc(p) + '</li>'; }).join('') + '</ul>';
+        }
+        html += '<a class="btn btn-primary btn-sm mt-auto" href="' + spdPlanUrl.replace('PLANID00', encodeURIComponent(plan.id)) + '">' + spdPlanEsc(@json(trans('lang.provider_sub_subscribe'))) + '</a>';
+        return html + '</div></div>';
+    }
+    async function renderProviderPlans() {
+        var snapshots = await database.collection('provider_subscription_plans').where('providerId', '==', providerID).where('isEnable', '==', true).get();
+        var plans = snapshots.docs.map(function (doc) { var p = doc.data(); p.id = p.id || doc.id; return p; })
+            .filter(function (p) { return /^[A-Za-z0-9_-]{8,64}$/.test(p.id) && parseFloat(p.price) > 0; });
+        if (!plans.length) {
+            return;
+        }
+        plans.sort(function (a, b) { return (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0); });
+        $('#provider-plans-list').html(plans.map(buildProviderPlanCard).join(''));
+        $('#provider-plans').show();
+    }
 
     async function getServices(page) {
         providerServicesRef.get().then(async function(snapshots) {

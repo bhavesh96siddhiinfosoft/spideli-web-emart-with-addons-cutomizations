@@ -145,6 +145,11 @@ Route::get('pispi/cancel', [PiSpiController::class, 'cancel'])->name('pispi.canc
 Route::get('finance/topup/{id}', [FinanceTopupController::class, 'start'])->where('id', '[A-Za-z0-9_-]{8,64}')->middleware('throttle:30,1')->name('finance.topup.start');
 Route::get('finance/topup/{id}/done', [FinanceTopupController::class, 'done'])->where('id', '[A-Za-z0-9_-]{8,64}')->name('finance.topup.done');
 Route::get('finance/topup/{id}/failed', [FinanceTopupController::class, 'failed'])->where('id', '[A-Za-z0-9_-]{8,64}')->name('finance.topup.failed');
+// #114: a client subscribes to a provider's plan (wallet or the client's gateways), signed in
+Route::get('provider-subscription/{planId}', [App\Http\Controllers\ProviderSubscriptionController::class, 'show'])->where('planId', '[A-Za-z0-9_-]{8,64}')->name('provider-subscription.show');
+Route::post('provider-subscription/{planId}', [App\Http\Controllers\ProviderSubscriptionController::class, 'pay'])->where('planId', '[A-Za-z0-9_-]{8,64}')->middleware('throttle:20,1')->name('provider-subscription.pay');
+Route::get('provider-subscription/checkout/{id}/done', [App\Http\Controllers\ProviderSubscriptionController::class, 'done'])->where('id', 'psc_[0-9]+_[a-z0-9]{10}')->name('provider-subscription.done');
+Route::get('provider-subscription/checkout/{id}/failed', [App\Http\Controllers\ProviderSubscriptionController::class, 'failed'])->where('id', 'psc_[0-9]+_[a-z0-9]{10}')->name('provider-subscription.failed');
 Route::get('failed', [CheckoutController::class, 'failed'])->name('failed');
 Route::get('notify', [CheckoutController::class, 'notify'])->name('notify');
 Route::get('transactions', [TransactionController::class, 'index'])->name('transactions');

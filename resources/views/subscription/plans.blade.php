@@ -55,6 +55,13 @@
                 <div id="my_store_subscriptions_list" class="row"></div>
             </div>
 
+            {{-- #114: plans bought from service PROVIDERS (own collection provider_subscriptions). Hidden when none. --}}
+            <div id="my_provider_subscriptions" class="mt-4" style="display:none;">
+                <h5 class="font-weight-bold mb-1">{{ trans('lang.provider_sub_mine') }}</h5>
+                <p class="text-muted small mb-3">{{ trans('lang.provider_sub_mine_intro') }}</p>
+                <div id="my_provider_subscriptions_list" class="row"></div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -102,6 +109,7 @@
          * them must not take the platform plans down with it. */
         try {
             await renderMyStoreSubscriptions();
+            await renderMyProviderSubscriptions().catch(function (e) { console.error('provider subscriptions', e); });
         } catch (e) {
             console.error('store subscriptions could not be listed', e);
         }
@@ -406,6 +414,51 @@
     /* Everything this customer holds from a store, live or lapsed. Lapsed
      * ones are still listed rather than hidden: a customer asking "what
      * happened to my bread delivery" needs to see that it ran out. */
+    /* #114: everything this customer holds from a provider, live or lapsed, newest expiry first. The plan comes from
+     * the snapshot taken when they paid; the provider's name is looked up. */
+    function spdSubEsc(value) {
+        return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function buildMyProviderSubscriptionCard(row) {
+        var expiry = storeSubscriptionExpiry(row.subscription);
+        var cancelled = (row.subscription.status || 'active') === 'cancelled';
+        var lapsed = expiry !== null && expiry.getTime() < Date.now();
+        var state = cancelled ? '<span class="badge badge-danger">' + spdSubEsc(@json(trans('lang.subscription_status_cancelled'))) + '</span>'
+            : (lapsed ? '<span class="badge badge-warning">' + spdSubEsc(@json(trans('lang.subscription_expired'))) + '</span>'
+            : '<span class="badge badge-success">' + spdSubEsc(@json(trans('lang.provider_sub_active'))) + '</span>');
+        var until = expiry ? expiry.toDateString() : '';
+        return '<div class="col-md-6 mb-3"><div class="border rounded p-3 h-100">' +
+            '<div class="d-flex justify-content-between align-items-start"><h6 class="font-weight-bold mb-1">' + spdSubEsc(row.plan.title || '') + '</h6>' + state + '</div>' +
+            '<div class="small text-muted mb-1">' + spdSubEsc(row.providerName) + '</div>' +
+            (until ? '<div class="small">' + spdSubEsc(@json(trans('lang.provider_sub_until'))) + ' ' + spdSubEsc(until) + '</div>' : '') +
+            '</div></div>';
+    }
+    async function renderMyProviderSubscriptions() {
+        if (cuser_id == '') {
+            return;
+        }
+        var snapshots = await database.collection('provider_subscriptions').where('customerId', '==', cuser_id).get();
+        if (snapshots.empty) {
+            return;
+        }
+        var names = {};
+        var rows = await Promise.all(snapshots.docs.map(async function (doc) {
+            var s = doc.data();
+            if (s.providerId && names[s.providerId] === undefined) {
+                var p = await database.collection('users').doc(s.providerId).get();
+                names[s.providerId] = p.exists ? ((p.data().firstName || '') + ' ' + (p.data().lastName || '')).trim() : '';
+            }
+            return {subscription: s, plan: s.plan || {}, providerName: names[s.providerId] || ''};
+        }));
+        rows.sort(function (a, b) {
+            var l = storeSubscriptionExpiry(a.subscription), r = storeSubscriptionExpiry(b.subscription);
+            return (r ? r.getTime() : 0) - (l ? l.getTime() : 0);
+        });
+        document.getElementById('my_provider_subscriptions_list').innerHTML = rows.map(buildMyProviderSubscriptionCard).join('');
+        $('#my_provider_subscriptions').show();
+    }
+
     async function renderMyStoreSubscriptions() {
         if (cuser_id == '') {
             return;
